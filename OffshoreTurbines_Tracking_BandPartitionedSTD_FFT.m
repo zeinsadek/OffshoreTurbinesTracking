@@ -3,306 +3,273 @@
 % 
 % Key changes from original:
 % 1. Uses FFT-based band-limited RMS (no filter roll-off losses)
-% 2. Bands are defined to be perfectly contiguous: [0, 0.5*fw], [0.5*fw,
-% 1.5*fw], [1.5*fw, Fs/2]
+% 2. Bands are defined to be perfectly contiguous: 
+% [0, 0.5*fw], [0.5*fw, 1.5*fw], [1.5*fw, Fs/2]
 % 3. Includes verification that sum of squared band RMS equals total variance
+
+% Saved matfile is technically decomposed standard deviation (having same
+% units as signal) and need to be converted into variance before being
+% combined: full^2 = LF^2 + WF^2 + HF^2, hence the same
+% bandPartitionedDEVIATIONS
 
 clear; close all; clc;
 addpath("/Users/zeinsadek/Documents/MATLAB/MatlabFunctions")
 addpath("/Users/zeinsadek/Documents/MATLAB/colormaps")
+addpath('/Users/zeinsadek/Documents/MATLAB/colormaps/slanCM')
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % IMPORT TRACKING
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+% Paths
 offshore_path = "/Users/zeinsadek/Desktop/Experiments/Offshore";
-power_path = fullfile(offshore_path, "Power/Data/Matfiles");
 tracking_path = fullfile(offshore_path, "Tracking/Data/Matfiles");
 
-farm_arrangement = "Staggered";
+% Farm layout + Data filter version
+farm_arrangement = "Inline";
+harmonic_cutoff = 5;
 
-% Load all spacings
+
+% Number of turbines based on arrangement
+turbine_catalog.Inline.turbines = 1:12;
+turbine_catalog.Staggered.turbines = 1:10;
+
+% Center turbines based on arrangement
+turbine_catalog.Inline.centers = [2,5,8,10];
+turbine_catalog.Staggered.centers = [2,4,7,9];
+
+% Get farm layout info
+turbines = turbine_catalog.(farm_arrangement).turbines;
+centers = turbine_catalog.(farm_arrangement).centers;
+
+% Farm spacings
 farm_spacings = [5, 4.5, 4, 3.5, 3];
 
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    caze = strcat("WT60_", farm_spacing, "_AG0");
-    fprintf('%s\n', caze)
-    
-    % Import Tracking
-    tracking_file = fullfile(tracking_path, farm_arrangement, strcat(caze, ".mat"));
-    tmp = load(tracking_file);
-    tmp = tmp.(caze);
+% Load tracking
+tracking_file = sprintf('OffshoreTracking_AllDataCombined_SavitskyGolay_Cutoff_%1.0f.mat', harmonic_cutoff);
+full_tracking = load(fullfile(tracking_path, "AllData", tracking_file));
+full_tracking = full_tracking.tracking;
 
-    tmp_tracking.(farm_spacing) = tmp;
+% Load Savitsky-Golay filter design
+filterspecs = full_tracking.FilterDesign;
 
-    clear s caze tracking_file tmp
-end
-clear tracking_path 
+% Load data for specific layout
+tracking = full_tracking.(farm_arrangement);
 
-% Convert fieldnames into arry for turbines in tracking structure to match
-% power
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    caze = strcat("WT60_", farm_spacing, "_AG0");
-    fprintf('%s\n', caze)
-    tmp = tmp_tracking.(farm_spacing);
+% Load full STDs
+deviations_file = sprintf('OffshoreTracking_FullSTD_SavitskyGolay_Cutoff_%1.0f.mat', harmonic_cutoff);
+full_deviations = load(fullfile(tracking_path, "StandardDeviations", deviations_file));
+full_deviations = full_deviations.deviations;
 
-    waves = fieldnames(tmp);
-    turbines = fieldnames(tmp.(waves{1}));
+% Load data for specific layout
+deviations = full_deviations.(farm_arrangement);
 
-    for w = 1:length(waves)
-        wave = waves{w};
-        disp(wave)
-        for t = 1:length(turbines)
-            turbine = turbines{t};
-            tracking.(farm_spacing).(wave)(t) = tmp_tracking.(farm_spacing).(wave).(turbine);
-        end
+clear offshore_path tracking_file deviations_file
 
-    end
-end
 
-clear wave turbine w t tmp_tracking
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% WAVE INFORMATION AND NAMING CONVENTIONS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+% Farm arrangements
+farm_arrangements = {"Inline", "Staggered"};
+
+% Wave forcing frequencies
 forcing_frequencies.("LM5")  = 1.4273;
 forcing_frequencies.("LM4")  = 1.6075;
 forcing_frequencies.("LM33") = 1.7651;
 forcing_frequencies.("LM3")  = 1.8617;
 forcing_frequencies.("LM25") = 2.0402;
 forcing_frequencies.("LM2")  = 2.2813;
+% Wavelengths
+wavelengths_from_string.("LM5")  = 5;
+wavelengths_from_string.("LM4")  = 4;
+wavelengths_from_string.("LM33") = (5 / 1.5);
+wavelengths_from_string.("LM3")  = 3;
+wavelengths_from_string.("LM25") = 2.5;
+wavelengths_from_string.("LM2")  = 2;
+% Steepnesses
+steepesses_from_string.("AK12") = 0.12;
+steepesses_from_string.("AK09") = 0.09;
+steepesses_from_string.("AK06") = 0.06;
+
+
+% Degrees of freedom to loop over
+DOFs = {'x_kal', 'y_kal', 'z_kal', 'roll_kal', 'pitch_kal', 'yaw_kal'};
+% Plotting nomenclature: DOF names
+DOF_names.x_kal = 'Surge';
+DOF_names.y_kal = 'Heave';
+DOF_names.z_kal = 'Sway';
+DOF_names.roll_kal = 'Roll';
+DOF_names.pitch_kal = 'Pitch';
+DOF_names.yaw_kal = 'Yaw';
+% Plotting nomenclature: DOF symbols
+DOF_symbs.x_kal = 'x';
+DOF_symbs.y_kal = 'y';
+DOF_symbs.z_kal = 'z';
+DOF_symbs.roll_kal = '\phi';
+DOF_symbs.pitch_kal = '\theta';
+DOF_symbs.yaw_kal = '\psi';
+% Types of motion
+translations = {'x_kal', 'y_kal', 'z_kal'};
+rotations = {'roll_kal', 'pitch_kal', 'yaw_kal'};
+
+% Frequency component names
+frequency_names.LF = "Low Frequency"; 
+frequency_names.WF = "Wave Frequency"; 
+frequency_names.HF = "High Frequency"; 
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% CORRECT COORDINATE SYSTEM
+% PLOTTING PROPERTIES AND CONSTANTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-fillmethod = 'spline';
+% Wavelengths and steepnesses to loop over
+wavelengths = [5,4,3,2];
+wave_steepnesses = [0.06, 0.09, 0.12];
 
-clc;
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    caze = strcat("WT60_", farm_spacing, "_AG0");
-    fprintf('%s\n', caze)
-    
-    tmp = tracking.(farm_spacing);
-    waves = fieldnames(tmp);
+% Colors per row
+row_colors.Row1 = flipud(slanCM(45, 2 * length(wavelengths)));
+row_colors.Row2 = flipud(slanCM(47, 2 * length(wavelengths)));
+row_colors.Row3 = flipud(slanCM(34, 2 * length(wavelengths)));
+row_colors.Row4 = flipud(slanCM(35, 2 * length(wavelengths)));
 
-    for w = 1:length(waves)
-        wave = waves{w};
-        for t = 1:length(turbines)
-    
-            % Time
-            corrected_tracking.(farm_spacing).(wave)(t).time = tracking.(farm_spacing).(wave)(t).time;
-    
-            % Raw
-            % Convert cm to m
-            corrected_tracking.(farm_spacing).(wave)(t).x = fillmissing(tracking.(farm_spacing).(wave)(t).x, fillmethod) .* 1E-2;
-            corrected_tracking.(farm_spacing).(wave)(t).y = fillmissing(tracking.(farm_spacing).(wave)(t).z, fillmethod) .* 1E-2;
-            corrected_tracking.(farm_spacing).(wave)(t).z = fillmissing(-1 * tracking.(farm_spacing).(wave)(t).y, fillmethod) .* 1E-2;
-    
-            % Rotation in degrees
-            corrected_tracking.(farm_spacing).(wave)(t).roll = fillmissing(tracking.(farm_spacing).(wave)(t).roll, fillmethod);
-            corrected_tracking.(farm_spacing).(wave)(t).pitch = fillmissing(-1 * tracking.(farm_spacing).(wave)(t).pitch, fillmethod);
-            corrected_tracking.(farm_spacing).(wave)(t).yaw = fillmissing(tracking.(farm_spacing).(wave)(t).yaw, fillmethod);
-            
-            % Kalman
-            % Convert cm to m
-            corrected_tracking.(farm_spacing).(wave)(t).x_kal = fillmissing(tracking.(farm_spacing).(wave)(t).x_kal, fillmethod) .* 1E-2;
-            corrected_tracking.(farm_spacing).(wave)(t).y_kal = fillmissing(tracking.(farm_spacing).(wave)(t).z_kal, fillmethod) .* 1E-2;
-            corrected_tracking.(farm_spacing).(wave)(t).z_kal = fillmissing(-1 * tracking.(farm_spacing).(wave)(t).y_kal, fillmethod) .* 1E-2;
-    
-            % Rotation in degrees
-            corrected_tracking.(farm_spacing).(wave)(t).roll_kal = fillmissing(tracking.(farm_spacing).(wave)(t).roll_kal, fillmethod);
-            corrected_tracking.(farm_spacing).(wave)(t).pitch_kal = fillmissing(-1 * tracking.(farm_spacing).(wave)(t).pitch_kal, fillmethod);
-            corrected_tracking.(farm_spacing).(wave)(t).yaw_kal = fillmissing(tracking.(farm_spacing).(wave)(t).yaw_kal, fillmethod);
-    
-        end
-    end
-end
-
-
-% Replace with correct signs
-clear tracking w t
-tracking = corrected_tracking;
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% COMPUTE STD OF EACH DOF
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-DOFs = {'x_kal', 'y_kal', 'z_kal', 'roll_kal', 'pitch_kal', 'yaw_kal'};
-
-clc;
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    caze = strcat("WT60_", farm_spacing, "_AG0");
-    fprintf('%s\n', caze)
-    
-    tmp = tracking.(farm_spacing);
-    waves = fieldnames(tmp);
-
-    % Loop through waves
-    for w = 1:length(waves)
-        wave = waves{w};
-
-        % Loop through DOFs
-        for d = 1:length(DOFs)
-            DOF = DOFs{d};
-
-            % Loop through turbines
-            for t = 1:length(turbines)
-                % Compute standard deviation
-                deviations.(farm_spacing).(wave)(t).(DOF) = std(tracking.(farm_spacing).(wave)(t).(DOF), 0, 'all', 'omitnan');
-            end
-        end
-    end
-end
+% Scatter plot nomenclature
+marker_size = 100;
+steepness_alpha = [0.3, 0.6, 1];
+spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % COMPUTE BAND-LIMITED RMS OF EACH DOF (FFT METHOD)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 
+
 % KEY CHANGES:
 % 1. Using FFT-based method for sharp frequency cutoffs
 % 2. Bands are perfectly contiguous: [0, 0.5*fw], [0.5*fw, 1.5*fw], [1.5*fw, Fs/2]
 % 3. This ensures sum of squared RMS values = total variance
 
-Fs = 30;
-DOFs = {'x_kal', 'y_kal', 'z_kal', 'roll_kal', 'pitch_kal', 'yaw_kal'};
+sampling_frequency = 30;
 
-clc;
-fprintf('Computing band-limited RMS using FFT method...\n\n');
+clc; fprintf('Computing band-limited RMS using FFT method...\n\n');
+% Loop through farm arrangements
+for a = 1:length(farm_arrangements)
+    arrangement = farm_arrangements{a};
 
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    caze = strcat("WT60_", farm_spacing, "_AG0");
-    fprintf('%s\n', caze)
+    % Loop through farm spacings
+    for s = 1:length(farm_spacings)
+        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+        caze = strcat("WT60_", farm_spacing, "_AG0");
+        fprintf('%s: %s\n', arrangement, caze)
+        waves = fieldnames(full_tracking.(arrangement).(farm_spacing));
     
-    tmp = tracking.(farm_spacing);
-    waves = fieldnames(tmp);
+        % Loop through waves
+        for w = 1:length(waves)
 
-    % Loop through waves
-    for w = 1:length(waves)
-        % Get wave and wave frequency
-        wave = waves{w};
-        split_wave = split(wave, '_');
-        wavelength_name = split_wave{1};
-
-        if ~strcmp(wavelength_name, 'LM0')
-            fw = forcing_frequencies.(wavelength_name);
-
-            % Define contiguous bands spanning [0, Fs/2]
-            % No gaps, no overlaps
-            bands.LF   = [0,       0.5*fw];     % DC to half wave frequency
-            bands.Wave = [0.5*fw,  1.5*fw];     % Wave frequency band
-            bands.HF   = [1.5*fw,  Fs/2];       % High frequency to Nyquist
+            % Get wave and wave frequency
+            wave = waves{w};
+            split_wave = split(wave, '_');
+            wavelength_name = split_wave{1};
     
-            % Loop through DOFs
-            for d = 1:length(DOFs)
-                DOF = DOFs{d};
+            % Skip no-wave case
+            if ~strcmp(wavelength_name, 'LM0')
+                fw = forcing_frequencies.(wavelength_name);
     
-                % Loop through turbines
-                for t = 1:length(turbines)
-                    % Signal
-                    q = tracking.(farm_spacing).(wave)(t).(DOF);
+                % Define contiguous bands spanning [0, Fs/2]
+                % No gaps, no overlaps
+                bands.LF = [0,       0.5*fw];                 % DC to half wave frequency
+                bands.WV = [0.5*fw,  1.5*fw];                 % Wave frequency band
+                bands.HF = [1.5*fw,  sampling_frequency/2];   % High frequency to Nyquist
+        
+                % Loop through DOFs
+                for d = 1:length(DOFs)
+                    DOF = DOFs{d};
+        
+                    % Loop through turbines
+                    for t = 1:length(turbine_catalog.(arrangement).turbines)
+                        % Signal
+                        q = full_tracking.(arrangement).(farm_spacing).(wave)(t).(DOF);
+        
+                        % Compute low frequency portion (includes DC)
+                        rLF = bandlimited_rms_fft(q, sampling_frequency, bands.LF(1), bands.LF(2), 'constant');
+                        
+                        % Compute wave frequency portion
+                        rWV = bandlimited_rms_fft(q, sampling_frequency, bands.WV(1), bands.WV(2), 'constant');
+        
+                        % Compute high frequency portion (up to Nyquist)
+                        rHF = bandlimited_rms_fft(q, sampling_frequency, bands.HF(1), bands.HF(2), 'constant');
     
-                    % Compute low frequency portion (includes DC)
-                    rLF = bandlimited_rms_fft(q, Fs, bands.LF(1), bands.LF(2), 'constant');
-                    
-                    % Compute wave frequency portion
-                    rWave = bandlimited_rms_fft(q, Fs, bands.Wave(1), bands.Wave(2), 'constant');
-    
-                    % Compute high frequency portion (up to Nyquist)
-                    rHF = bandlimited_rms_fft(q, Fs, bands.HF(1), bands.HF(2), 'constant');
-
-                    % Save
-                    bandfilteredDeviations.(farm_spacing).(wave)(t).(DOF).LF = rLF;
-                    bandfilteredDeviations.(farm_spacing).(wave)(t).(DOF).WF = rWave;
-                    bandfilteredDeviations.(farm_spacing).(wave)(t).(DOF).HF = rHF;
-    
+                        % Save
+                        bandPartitionedDeviations.(arrangement).(farm_spacing).(wave)(t).(DOF).LF = rLF;
+                        bandPartitionedDeviations.(arrangement).(farm_spacing).(wave)(t).(DOF).WF = rWV;
+                        bandPartitionedDeviations.(arrangement).(farm_spacing).(wave)(t).(DOF).HF = rHF;
+                        bandPartitionedDeviations.(arrangement).(farm_spacing).(wave)(t).(DOF).Full = full_deviations.(arrangement).(farm_spacing).(wave)(t).(DOF);
+       
+                    end
                 end
             end
         end
     end
+    fprintf('\n')
 end
+fprintf('Done!\n');
 
-fprintf('\nDone!\n');
-
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% VERIFY: Sum of squared bands should equal total variance
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-clc;
-fprintf('=== VERIFICATION: Parseval''s Theorem Check ===\n\n');
-
-spacing = 'SX50';
-wave = 'LM5_AK12';
-turbine = 1;
-DOF = 'yaw_kal';
-
-full = deviations.(spacing).(wave)(turbine).(DOF);
-LF = bandfilteredDeviations.(spacing).(wave)(turbine).(DOF).LF;
-WF = bandfilteredDeviations.(spacing).(wave)(turbine).(DOF).WF;
-HF = bandfilteredDeviations.(spacing).(wave)(turbine).(DOF).HF;
-
-% Sum of squares of partitioned signals
-ss = LF^2 + WF^2 + HF^2;
-total_squared = full^2;
-
-fprintf('Case: %s, %s, Turbine %d, DOF: %s\n', spacing, wave, turbine, DOF);
-fprintf('--------------------------------------------\n');
-fprintf('Band RMS values:\n');
-fprintf('  LF:   %.6f\n', LF);
-fprintf('  Wave: %.6f\n', WF);
-fprintf('  HF:   %.6f\n', HF);
-fprintf('\nFull signal STD: %.6f\n', full);
-fprintf('\nSum of squared bands:  %.6f\n', ss);
-fprintf('Squared full STD:      %.6f\n', total_squared);
-fprintf('\nRatio (should be ~1.0): %.6f\n', ss / total_squared);
+clear a arrangement s farm_spacing caze waves w wave split_wave wavelength_name fw
+clear bands d DOF t q rLF rWV rHF
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % CHECK ALL CASES - Find worst closure errors
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-clc;
-fprintf('=== Checking closure errors for all cases ===\n\n');
-
 ratios = [];
 worst_cases = struct('ratio', [], 'spacing', {}, 'wave', {}, 'turbine', [], 'DOF', {});
 
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    tmp = tracking.(farm_spacing);
-    waves = fieldnames(tmp);
+clc; fprintf('=== Checking closure errors for all cases ===\n\n');
+% Loop through farm arrangements
+for a = 1:length(farm_arrangements)
+    arrangement = farm_arrangements{a};
 
-    for w = 1:length(waves)
-        wave = waves{w};
-        split_wave = split(wave, '_');
-        wavelength_name = split_wave{1};
+    % Loop through farm spacings
+    for s = 1:length(farm_spacings)
+        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+        waves = fieldnames(full_tracking.(arrangement).(farm_spacing));
+    
+        % Loop through waves
+        for w = 1:length(waves)
+            wave = waves{w};
+            split_wave = split(wave, '_');
+            wavelength_name = split_wave{1};
+    
+            % Skip no-wave cases
+            if ~strcmp(wavelength_name, 'LM0') && isfield(bandPartitionedDeviations.(arrangement).(farm_spacing), wave)
 
-        if ~strcmp(wavelength_name, 'LM0') && isfield(bandfilteredDeviations.(farm_spacing), wave)
-            for d = 1:length(DOFs)
-                DOF = DOFs{d};
-                for t = 1:length(turbines)
-                    full = deviations.(farm_spacing).(wave)(t).(DOF);
-                    LF = bandfilteredDeviations.(farm_spacing).(wave)(t).(DOF).LF;
-                    WF = bandfilteredDeviations.(farm_spacing).(wave)(t).(DOF).WF;
-                    HF = bandfilteredDeviations.(farm_spacing).(wave)(t).(DOF).HF;
-                    
-                    ss = LF^2 + WF^2 + HF^2;
-                    ratio = ss / full^2;
-                    ratios = [ratios; ratio];
-                    
-                    % Track worst cases
-                    if abs(ratio - 1) > 0.01  % More than 1% error
-                        idx = length(worst_cases) + 1;
-                        worst_cases(idx).ratio = ratio;
-                        worst_cases(idx).spacing = farm_spacing;
-                        worst_cases(idx).wave = wave;
-                        worst_cases(idx).turbine = t;
-                        worst_cases(idx).DOF = DOF;
+                % Loop through DOFs
+                for d = 1:length(DOFs)
+                    DOF = DOFs{d};
+
+                    % Loop through turbines
+                    for t = 1:length(turbine_catalog.(arrangement).turbines)
+                        % Get components
+                        full = full_deviations.(arrangement).(farm_spacing).(wave)(t).(DOF);
+                        LF = bandPartitionedDeviations.(arrangement).(farm_spacing).(wave)(t).(DOF).LF;
+                        WF = bandPartitionedDeviations.(arrangement).(farm_spacing).(wave)(t).(DOF).WF;
+                        HF = bandPartitionedDeviations.(arrangement).(farm_spacing).(wave)(t).(DOF).HF;
+                        
+                        % Check summation
+                        ss = LF^2 + WF^2 + HF^2;
+                        ratio = ss / full^2;
+                        ratios = [ratios; ratio];
+                        
+                        % Track worst cases
+                        if abs(ratio - 1) > 0.01  % More than 1% error
+                            idx = length(worst_cases) + 1;
+                            worst_cases(idx).ratio = ratio;
+                            worst_cases(idx).spacing = farm_spacing;
+                            worst_cases(idx).wave = wave;
+                            worst_cases(idx).turbine = t;
+                            worst_cases(idx).DOF = DOF;
+                        end
                     end
                 end
             end
@@ -310,14 +277,14 @@ for s = 1:length(farm_spacings)
     end
 end
 
+% Display statistics
 fprintf('Closure ratio statistics:\n');
 fprintf('  Min:    %.6f\n', min(ratios));
 fprintf('  Max:    %.6f\n', max(ratios));
 fprintf('  Mean:   %.6f\n', mean(ratios));
 fprintf('  Median: %.6f\n', median(ratios));
 fprintf('  Std:    %.6f\n', std(ratios));
-
-fprintf('\nCases with >1%% error: %d out of %d\n', length(worst_cases), length(ratios));
+fprintf('\nCases with >1%% error: %d out of %d\n\n', length(worst_cases), length(ratios));
 
 if ~isempty(worst_cases)
     fprintf('\nWorst cases:\n');
@@ -329,198 +296,92 @@ if ~isempty(worst_cases)
     end
 end
 
-% Histogram
-% figure;
-% histogram(ratios, 50);
-% xlabel('Closure Ratio (sum of squared bands / total variance)');
-% ylabel('Count');
-% title('Distribution of Parseval''s Theorem Closure Ratios');
-% xline(1, 'r--', 'LineWidth', 2);
-% legend('Ratios', 'Perfect closure');
+% Save matfile
+fprintf('\n')
+save_path = fullfile(tracking_path, 'StandardDeviations', sprintf('OffshoreTracking_BandPartitionedSTD_SavitskyGolay_Cutoff_%1.0f.mat', harmonic_cutoff));
+fprintf('Saving Band-Partitioned Standard Deviations...\n')
+save(save_path, 'bandPartitionedDeviations')
+fprintf('Done Saving!\n\n')
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% NOMENCLATURE FOR DOFS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Only consider deviations from specific arrangement
+bandPartitionedDeviations = bandPartitionedDeviations.(farm_arrangement);
 
-% DOF names
-names.x_kal = 'Surge';
-names.y_kal = 'Heave';
-names.z_kal = 'Sway';
-names.roll_kal = 'Roll';
-names.pitch_kal = 'Pitch';
-names.yaw_kal = 'Yaw';
-
-% DOF symbols
-symbs.x_kal = 'x';
-symbs.y_kal = 'y';
-symbs.z_kal = 'z';
-symbs.roll_kal = '\phi';
-symbs.pitch_kal = '\theta';
-symbs.yaw_kal = '\psi';
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PLOTTING: STACKED BAR CHART
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-frequencies = {'LF', 'WF', 'HF'};
-wavelengths = [5,4,3,2];
-wave_steepness = 0.12;
-steep = compose('%02d', round(100 * wave_steepness));
-turbine = 8;
-DOF = 'z_kal';
-
-name = names.(DOF);
-symb = symbs.(DOF);
-
-% Get proper units
-if ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
-    units = '[Deg]';
-else
-    units = '[m]';
-end
-
-wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
-tmp = nan(length(farm_spacings), length(wavelengths), 3);
-
-% Create legend names for each wave case
-legend_names = {};
-for i = 1:length(wavelengths)
-    wave = wavelengths(i);
-    if wave ~= 0
-        legend_names{i} = ['$\lambda = ', num2str(wave), 'D$'];
-    else
-        legend_names{i} = 'No Waves';
-    end
-end
-
-
-% Generate array for bar chart
-clc;
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    caze = strcat("WT60_", farm_spacing, "_AG0");
-    fprintf('%s\n', caze)
-
-    for w = 1:length(wavelengths)
-        wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
-
-        for f = 1:3
-            tmp(s,w,f) = bandfilteredDeviations.(farm_spacing).(wave)(turbine).(DOF).(frequencies{f});
-        end
-    end
-end
-
-
-stackAlpha  = linspace(0.4,1,size(tmp,3));  % opacity per STACK
-groupLabels = arrayfun(@(x) sprintf("%g", x), farm_spacings, 'UniformOutput', false);
-
-
-% Sort by xVals (or use your own custom order)
-[xSorted, idx] = sort(farm_spacings, 'ascend');
-
-tmp  = tmp(idx,:,:);
-labels = groupLabels(idx);
-
-
-figure('color', 'white')
-hold on
-plotBarStackGroups(tmp, wave_colors, stackAlpha, labels);
-
-ylabel(sprintf('$\\sigma_{%s}$ %s', symb, units), 'interpreter', 'latex', 'fontsize', 14)
-xlabel('$S_x / D$', 'interpreter', 'latex')
-legend(legend_names, 'interpreter', 'latex', 'box', 'off')
-
-title(sprintf('%s Floating Wind Farm: %s $(%s)$ Standard Deviation, $ak = %1.2f$', farm_arrangement, name, symb, wave_steepness), 'Interpreter', 'latex')
-
+clear a arrangement s farm_spacing waves w wave split_wave wavelength_name d DOF t full
+clear LF WF HF ss ratio ratios worst_cases wc sortIdx
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PLOTTING AGAINST HARMONIC RATIO: ALL STEEPNESSES
+% PLOTTING: NORMALIZED BAND-PARTITIONED VARIANCE 
+% AGAINST HARMONIC RATIO
 % LOOPED OVER ALL DOF
+% CONSIDERING A SINGLE TURBINE
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% Plotting here the variance associated with the wave-frequency normalized
-% by the total variance
+% Plotting here the variance associated with the low, wave, or high 
+% frequency bands normalized by the total variance
 % Represents the percentage of the energy contained in this band, and varys
 % from 0 to 1
 
-clc;
-wavelengths = [5,4,3,2];
-wave_steepnesses = [0.06, 0.09, 0.12];
-turbine = 8;
+% Which turbine to plot
+turbine = 7;
+frequency_component = 'LF';
+row = turbineRow(turbine, farm_arrangement);
+frequency_name = frequency_names.(frequency_component);
+colors = row_colors.(sprintf('Row%1.0f', row));
 
-freq = 'HF';
-
-% Titles based on frequency
-if strcmp(freq, 'HF')
-    freq_name = 'High Frequency';
-elseif strcmp(freq, 'WF')
-    freq_name = 'Wave Frequency';
-elseif strcmp(freq, 'LF')
-    freq_name = 'Low Frequency';
-end
-
-
-steepness_alpha = [0.3, 0.6, 1];
-sz = 100;
-spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
-wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
-
+% Plotting
 clc; close all
 figure('color','white')
 t = tiledlayout(2,3);
-sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f %s Wave Score', farm_arrangement, ceil(turbine / 3), freq_name), 'Interpreter', 'latex')
+sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f %s Wave Score: $\\sigma_{%s}^2 / \\sigma^2$', farm_arrangement, row, frequency_name, frequency_component), 'Interpreter', 'latex')
 
+% Loop over DOFs
 for d = 1:length(DOFs)
     DOF = DOFs{d};
-    name = names.(DOF);
-    symb = symbs.(DOF);
-    
-    % Get proper units
-    if ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
-        units = '[Deg]';
-    else
-        units = '[m]';
-    end
-    
+
+    % Properly name DOF
+    name = DOF_names.(DOF);
+    symb = DOF_symbs.(DOF);    
 
     % Plotting
-    clc; clear tmp
     h(d) = nexttile;
-    title(sprintf('%s: $\\sigma_{%s}$ %s', name, symb, units), 'interpreter', 'latex', 'fontsize', 14)
+    title(sprintf('%s: $(%s)$', name, symb), 'interpreter', 'latex', 'fontsize', 14)
     hold on 
-    for st = 1:length(wave_steepnesses)
-        wave_steepness = wave_steepnesses(st);
-        steep = compose('%02d', round(100 * wave_steepness));
-        disp(steep{1})
-        
-        for s = 1:length(farm_spacings)
-            farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-            caze = strcat("WT60_", farm_spacing, "_AG0");
-            fprintf('%s\n', caze)
-        
+
+    % Loop through farm spacings
+    for s = 1:length(farm_spacings)
+        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+        available_wave_cases = fieldnames(bandPartitionedDeviations.(farm_spacing));
+
+        % Loop through wave steepnesses
+        for st = 1:length(wave_steepnesses)
+            steep = compose('%02d', round(100 * wave_steepnesses(st)));
+     
+            % Loop through wavelengths
             for w = 1:length(wavelengths)
                 wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
-                harmonic_ratio = farm_spacings(s) / wavelengths(w);
 
-                total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
-                wave_band_variance = bandfilteredDeviations.(farm_spacing).(wave)(turbine).(DOF).(freq)^2;
-                wave_score = wave_band_variance ./ total_variance;
-
-                scatter(harmonic_ratio, wave_score, sz, spacing_shapes{s}, 'filled', ...
-                        'MarkerFaceColor', wave_colors{w}, 'MarkerFaceAlpha', steepness_alpha(st), ...
-                        'HandleVisibility', 'off')
+                % Check that wave case is available in tracking data
+                if ismember(wave, available_wave_cases)
+                    harmonic_ratio = farm_spacings(s) / wavelengths(w);
+    
+                    total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
+                    wave_band_variance = bandPartitionedDeviations.(farm_spacing).(wave)(turbine).(DOF).(frequency_component)^2;
+                    wave_score = wave_band_variance ./ total_variance;
+    
+                    scatter(harmonic_ratio, wave_score, marker_size, spacing_shapes{s}, 'filled', ...
+                            'MarkerFaceColor', colors(w,:), 'MarkerFaceAlpha', steepness_alpha(st), ...
+                            'HandleVisibility', 'off')
+                end
             end
         end
     end
 
-
-
-    %%% Legend
+    % Legend
     if d == 1
         % Legend for color
         for w = 1:length(wavelengths)
-            plot(nan, nan, 'Color', wave_colors{w}, 'linewidth', 3, ...
+            plot(nan, nan, 'Color', colors(w,:), 'linewidth', 3, ...
                 'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
         end
 
@@ -530,7 +391,7 @@ for d = 1:length(DOFs)
 
         % Legend for marker shape
         for s = 1:length(farm_spacings)
-            scatter(nan, nan, sz, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
+            scatter(nan, nan, marker_size, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
                     'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
         end
 
@@ -540,104 +401,107 @@ for d = 1:length(DOFs)
 
         % Legend for marker alpha
         for st = 1:length(wave_steepnesses)
-            scatter(nan, nan, sz, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
+            scatter(nan, nan, marker_size, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
                     'markerfacealpha', steepness_alpha(st), ...
                     'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
         end
 
+        % Place legend outside
         leg = legend('interpreter', 'latex', 'box', 'off');
         leg.Layout.Tile = 'east';
     end
     hold off
 end
 xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
-ylabel(t, sprintf('$\\sigma_{%s}^2 / \\sigma^2$', freq), 'interpreter', 'latex')
+ylabel(t, sprintf('$\\sigma_{%s}^2 / \\sigma^2$', frequency_component), 'interpreter', 'latex')
 linkaxes(h, 'xy')
 xlim([0.5, 2.6])
 ylim([0, 1])
 
+clear frequency_component row frequency_name colors t d DOF name symb h s farm_spacing
+clear available_wave_cases st wave_steepness steep w wave harmonic_ratio total_variance
+clear wave_band_variance wave_score turbine leg
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PLOTTING AGAINST HARMONIC RATIO: ALL STEEPNESSES
+% PLOTTING: BALANCE BETWWEEN LOW AND WAVE COMPONENTS 
+% BAND-PARTITIONED VARIANCE AGAINST HARMONIC RATIO
 % LOOPED OVER ALL DOF
+% CONSIDERING A SINGLE TURBINE
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+% Plotting here the variance associated with the low, wave, or high 
+% frequency bands normalized by the total variance
+% Represents the balance of the energy contained in the low and wave bands
+% Varys from -1 to 1: -1 ~ low frequency, +1 ~ wave frequency
 
-% Plotting here the balance between the low and wave frequency contribution
+% Which turbine to plot
+turbine = 7;
+row = turbineRow(turbine, farm_arrangement);
+colors = row_colors.(sprintf('Row%1.0f', row));
 
-clc;
-wavelengths = [5,4,3,2];
-wave_steepnesses = [0.06, 0.09, 0.12];
-turbine = 8;
-
-steepness_alpha = [0.3, 0.6, 1];
-sz = 100;
-spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
-wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
-
+% Plotting
+clc; close all
 figure('color','white')
 t = tiledlayout(2,3);
-sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f Low/Wave Frequency Balance', farm_arrangement, ceil(turbine / 3)), 'Interpreter', 'latex')
+sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f Low/Wave Frequency Variance Balance', farm_arrangement, row), 'Interpreter', 'latex')
 
+% Loop through DOFs
 for d = 1:length(DOFs)
     DOF = DOFs{d};
-    name = names.(DOF);
-    symb = symbs.(DOF);
-   
-    % Get proper units
-    if ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
-        units = '[Deg]';
-    else
-        units = '[m]';
-    end
-    
-    
+
+    % Properly name DOF
+    name = DOF_names.(DOF);
+    symb = DOF_symbs.(DOF);    
+       
     % Plotting
     clc; clear tmp
     h(d) = nexttile;
-    title(sprintf('%s: $\\sigma_{%s}$ %s', name, symb, units), 'interpreter', 'latex', 'fontsize', 14)
+    title(sprintf('%s: $(%s)$', name, symb), 'interpreter', 'latex', 'fontsize', 14)
     hold on 
-    for st = 1:length(wave_steepnesses)
-        wave_steepness = wave_steepnesses(st);
-        steep = compose('%02d', round(100 * wave_steepness));
-        disp(steep{1})
-        
-        for s = 1:length(farm_spacings)
-            farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-            caze = strcat("WT60_", farm_spacing, "_AG0");
-            fprintf('%s\n', caze)
-        
+
+    % Loop through farm spacings
+    for s = 1:length(farm_spacings)
+        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+        available_wave_cases = fieldnames(bandPartitionedDeviations.(farm_spacing));
+
+        % Loop through wave steepnesses
+        for st = 1:length(wave_steepnesses)
+            steep = compose('%02d', round(100 * wave_steepnesses(st)));
+ 
+            % Loop through wavelengths
             for w = 1:length(wavelengths)
                 wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
-                harmonic_ratio = farm_spacings(s) / wavelengths(w);
 
-                % Get data
-                total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
-                low_band_variance = bandfilteredDeviations.(farm_spacing).(wave)(turbine).(DOF).LF^2;
-                wave_band_variance = bandfilteredDeviations.(farm_spacing).(wave)(turbine).(DOF).WF^2;
-
-                % Normalize
-                low_norm = low_band_variance / total_variance;
-                wave_norm = wave_band_variance / total_variance;
-
-                % Compute score
-                wave_score = (wave_norm - low_norm) / (wave_norm + low_norm);
-
-                scatter(harmonic_ratio, wave_score, sz, spacing_shapes{s}, 'filled', ...
-                        'MarkerFaceColor', wave_colors{w}, 'MarkerFaceAlpha', steepness_alpha(st), ...
-                        'HandleVisibility', 'off')
+                % Check that wave case is available in tracking data
+                if ismember(wave, available_wave_cases)
+                    harmonic_ratio = farm_spacings(s) / wavelengths(w);
+    
+                    % Get data
+                    total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
+                    low_band_variance = bandPartitionedDeviations.(farm_spacing).(wave)(turbine).(DOF).LF^2;
+                    wave_band_variance = bandPartitionedDeviations.(farm_spacing).(wave)(turbine).(DOF).WF^2;
+    
+                    % Normalize
+                    low_norm = low_band_variance / total_variance;
+                    wave_norm = wave_band_variance / total_variance;
+    
+                    % Compute score
+                    balance = (wave_norm - low_norm) / (wave_norm + low_norm);
+    
+                    scatter(harmonic_ratio, balance, marker_size, spacing_shapes{s}, 'filled', ...
+                            'MarkerFaceColor', colors(w,:), 'MarkerFaceAlpha', steepness_alpha(st), ...
+                            'HandleVisibility', 'off')
+                end
             end
         end
     end
 
-
-
-    %%% Legend
+    % Legend
     if d == 1
         % Legend for color
         for w = 1:length(wavelengths)
-            plot(nan, nan, 'Color', wave_colors{w}, 'linewidth', 3, ...
+            plot(nan, nan, 'Color', colors(w,:), 'linewidth', 3, ...
                 'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
         end
 
@@ -647,7 +511,7 @@ for d = 1:length(DOFs)
 
         % Legend for marker shape
         for s = 1:length(farm_spacings)
-            scatter(nan, nan, sz, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
+            scatter(nan, nan, marker_size, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
                     'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
         end
 
@@ -657,155 +521,182 @@ for d = 1:length(DOFs)
 
         % Legend for marker alpha
         for st = 1:length(wave_steepnesses)
-            scatter(nan, nan, sz, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
+            scatter(nan, nan, marker_size, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
                     'markerfacealpha', steepness_alpha(st), ...
                     'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
         end
 
+        % Place legend outside
         leg = legend('interpreter', 'latex', 'box', 'off');
         leg.Layout.Tile = 'east';
     end
     hold off
+
+    % Set aspect ratio equal since both values are unitless
+    % axis equal
 end
 xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
-ylabel(t, '$P_{WF} - P_{LF} / P_{WF} + P_{LF}$', 'interpreter', 'latex')
+ylabel(t, '$(P_{WF} - P_{LF}) / (P_{WF} + P_{LF})$', 'interpreter', 'latex')
 linkaxes(h, 'xy')
 xlim([0.5, 2.6])
 ylim([-1, 1])
 
 
+clear frequency_component row frequency_name colors t d DOF name symb h s farm_spacing
+clear available_wave_cases st wave_steepness steep w wave harmonic_ratio total_variance 
+clear wave_band_variance wave_score turbine total_variance low_band_variance wave_band_variance
+clear low_norm wave_norm balance leg
+
+
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PLOTTING AGAINST HARMONIC RATIO: ALL STEEPNESSES
-% LOOPED OVER ALL DOF
+% PLOTTING: BALANCE BETWWEEN LOW AND WAVE COMPONENTS 
+% BAND-PARTITIONED VARIANCE AGAINST HARMONIC RATIO
+% LOOPED OVER ALL CENTER TURBINES
+% CONSIDERING A DOF
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% Plotting here the balance between the low and high frequency contribution
+% Plotting here the variance associated with the low, wave, or high 
+% frequency bands normalized by the total variance
+% Represents the balance of the energy contained in the low and wave bands
+% Varys from -1 to 1: -1 ~ low frequency, +1 ~ wave frequency
 
-clc;
-wavelengths = [5,4,3,2];
-wave_steepnesses = [0.06, 0.09, 0.12];
-turbine = 8;
+% Which DOF to consider
+DOF = 'x_kal';
 
-steepness_alpha = [0.3, 0.6, 1];
-sz = 100;
-spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
-wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
+% Properly name DOF
+name = DOF_names.(DOF);
+symb = DOF_symbs.(DOF);
 
+% Plotting
+clc; close all
 figure('color','white')
-t = tiledlayout(2,3);
-sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f Low/High Frequency Balance', farm_arrangement, ceil(turbine / 3)), 'Interpreter', 'latex')
+t = tiledlayout(1,length(centers) + 1);
+sgtitle(sprintf('%s Floating Wind Farm: %s ($%s$) Low/Wave Frequency Variance Balance', farm_arrangement, name, symb), 'Interpreter', 'latex')
 
-for d = 1:length(DOFs)
-    DOF = DOFs{d};
-    name = names.(DOF);
-    symb = symbs.(DOF);
-   
-    % Get proper units
-    if ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
-        units = '[Deg]';
-    else
-        units = '[m]';
-    end
-    
-    
+% Loop through center turbines
+for c = 1:length(centers)
+
+    % Get turbine and corresponding color
+    turbine = centers(c);
+    row = turbineRow(turbine, farm_arrangement);
+    colors = row_colors.(sprintf('Row%1.0f', row));
+
     % Plotting
-    clc; clear tmp
-    h(d) = nexttile;
-    title(sprintf('%s: $\\sigma_{%s}$ %s', name, symb, units), 'interpreter', 'latex', 'fontsize', 14)
+    h(c) = nexttile;
+    title(sprintf('Row %1.0f', c))
     hold on 
-    for st = 1:length(wave_steepnesses)
-        wave_steepness = wave_steepnesses(st);
-        steep = compose('%02d', round(100 * wave_steepness));
-        disp(steep{1})
-        
-        for s = 1:length(farm_spacings)
-            farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-            caze = strcat("WT60_", farm_spacing, "_AG0");
-            fprintf('%s\n', caze)
-        
+
+    % Loop through farm spacings
+    for s = 1:length(farm_spacings)
+        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+        available_wave_cases = fieldnames(bandPartitionedDeviations.(farm_spacing));
+
+        % Loop through wave steepnesses
+        for st = 1:length(wave_steepnesses)
+            steep = compose('%02d', round(100 * wave_steepnesses(st)));
+
+            % Loop through wavelengths
             for w = 1:length(wavelengths)
                 wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
-                harmonic_ratio = farm_spacings(s) / wavelengths(w);
 
-                % Get data
-                total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
-                low_band_variance = bandfilteredDeviations.(farm_spacing).(wave)(turbine).(DOF).LF^2;
-                high_band_variance = bandfilteredDeviations.(farm_spacing).(wave)(turbine).(DOF).HF^2;
-
-                % Normalize
-                low_norm = low_band_variance / total_variance;
-                high_norm = high_band_variance / total_variance;
-
-                % Compute score
-                wave_score = (high_norm - low_norm) / (high_norm + low_norm);
-
-                scatter(harmonic_ratio, wave_score, sz, spacing_shapes{s}, 'filled', ...
-                        'MarkerFaceColor', wave_colors{w}, 'MarkerFaceAlpha', steepness_alpha(st), ...
-                        'HandleVisibility', 'off')
+                % Check that wave case is available in tracking data
+                if ismember(wave, available_wave_cases)
+                    harmonic_ratio = farm_spacings(s) / wavelengths(w);
+    
+                    % Get data
+                    total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
+                    low_band_variance = bandPartitionedDeviations.(farm_spacing).(wave)(turbine).(DOF).LF^2;
+                    wave_band_variance = bandPartitionedDeviations.(farm_spacing).(wave)(turbine).(DOF).WF^2;
+    
+                    % Normalize
+                    low_norm = low_band_variance / total_variance;
+                    wave_norm = wave_band_variance / total_variance;
+    
+                    % Compute score
+                    wave_score = (wave_norm - low_norm) / (wave_norm + low_norm);
+    
+                    scatter(harmonic_ratio, wave_score, marker_size, spacing_shapes{s}, 'filled', ...
+                            'MarkerFaceColor', colors(w,:), 'MarkerFaceAlpha', steepness_alpha(st), ...
+                            'HandleVisibility', 'off')
+                end
             end
         end
     end
 
-
-
-    %%% Legend
-    if d == 1
-        % Legend for color
-        for w = 1:length(wavelengths)
-            plot(nan, nan, 'Color', wave_colors{w}, 'linewidth', 3, ...
-                'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
-        end
-
-        % White space
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-
-        % Legend for marker shape
-        for s = 1:length(farm_spacings)
-            scatter(nan, nan, sz, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
-                    'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
-        end
-
-        % White space
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-
-        % Legend for marker alpha
-        for st = 1:length(wave_steepnesses)
-            scatter(nan, nan, sz, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
-                    'markerfacealpha', steepness_alpha(st), ...
-                    'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
-        end
-
-        leg = legend('interpreter', 'latex', 'box', 'off');
-        leg.Layout.Tile = 'east';
+    % Legend for each plot showing colors
+    for ww = 1:length(wavelengths)
+        plot(nan, nan, 'Color', colors(ww,:), 'linewidth', 3, ...
+            'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(ww)), 'HandleVisibility', 'on')
     end
+    legend('Interpreter', 'latex', 'box', 'off', 'location', 'best', 'fontsize', 8)
+
+    % Horizontal line at zero
+    yline(0, 'linestyle', '--', 'linewidth', 1, 'HandleVisibility', 'off', 'Alpha', 0.25)
+    yticks(-1:0.5:1)
     hold off
+
+    % Set aspect ratio equal since both values are unitless
+    % axis equal
 end
+
+% Generate outside legend for marker shape and transparency
+axLeg = nexttile;
+hold on; axis off
+
+% Proxies for marker shapes (spacing)
+for ss = 1:numel(farm_spacings)
+    scatter(axLeg, nan, nan, marker_size, spacing_shapes{ss}, 'k', 'filled', ...
+        'DisplayName', sprintf('$S_x = %1.1fD$', farm_spacings(ss)));
+end
+
+% Separator
+plot(axLeg, nan, nan, 'w', 'DisplayName', ' ');
+
+% Proxies for alpha (steepness)
+for stt = 1:numel(wave_steepnesses)
+    scatter(axLeg, nan, nan, marker_size, 'o', 'k', 'filled', ...
+        'MarkerFaceAlpha', steepness_alpha(stt), ...
+        'DisplayName', sprintf('$ak = %1.2f$', wave_steepnesses(stt)));
+end
+
+legend('Interpreter', 'latex', 'Box', 'off', 'FontSize', 10, 'Location', 'west');
+hold off
+  
+
+% Plot axes labels
 xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
-ylabel(t, '$P_{HF} - P_{LF} / P_{HF} + P_{LF}$', 'interpreter', 'latex')
+ylabel(t, '$(P_{WF} - P_{LF}) / (P_{WF} + P_{LF})$', 'interpreter', 'latex')
 linkaxes(h, 'xy')
-xlim([0.5, 2.6])
-ylim([-1, 1])
+xlim(h(1:length(centers)), [0.5, 2.6])
+ylim(h(1:length(centers)), [-1, 1])
 
-
-
-
-
-
-
-
-
-
-
-
-
+clear frequency_component row frequency_name colors t d DOF name symb h s farm_spacing
+clear available_wave_cases st wave_steepness steep w wave harmonic_ratio total_variance 
+clear wave_band_variance wave_score turbine total_variance low_band_variance wave_band_variance
+clear low_norm wave_norm balance leg alpha_proxy axLeg c H legGlobal ss stt ww
 
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% FFT-BASED BAND-LIMITED RMS FUNCTION
+% FUNCTIONS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function row = turbineRow(turbineID, layout)
+    % turbineRow: Figures out which row a turbine is in for both inline and
+    % staggered configurations
+
+    switch layout
+        case 'Inline'
+            row = ceil(turbineID / 3);
+        case 'Staggered'
+            rowSizes = [3 2 3 2];
+            rowEdges = [0 cumsum(rowSizes)];
+            row = find(turbineID > rowEdges(1:end-1) & ...
+                       turbineID <= rowEdges(2:end));
+        otherwise
+            error('Unknown layout type')
+    end
+end
 
 function [rmsBand, psdInfo] = bandlimited_rms_fft(q, Fs, f1, f2, detrendMode)
 % bandlimited_rms_fft  Compute RMS of q in the frequency band [f1,f2] using FFT
@@ -922,50 +813,3 @@ function [rmsBand, psdInfo] = bandlimited_rms_fft(q, Fs, f1, f2, detrendMode)
 end
 
 
-
-function [] = plotBarStackGroups(stackData, barColors, stackAlpha, groupLabels)
-% Plot a set of stacked bars, but group them according to labels provided.
-%
-% Params: 
-%      stackData is a 3D matrix (i.e., stackData(i, j, k) => (Group, Stack, StackElement)) 
-%      groupLabels is a CELL type (i.e., { 'a', 1 , 20, 'because' };)
-
-NumGroupsPerAxis = size(stackData, 1);
-NumStacksPerGroup = size(stackData, 2);
-
-
-% Count off the number of bins
-groupBins = 1:NumGroupsPerAxis;
-MaxGroupWidth = 0.65; % Fraction of 1. If 1, then we have all bars in groups touching
-groupOffset = MaxGroupWidth/NumStacksPerGroup;
-figure('color', 'white')
-hold on
-for i=1:NumStacksPerGroup
-
-    Y = squeeze(stackData(:,i,:));
-    
-    % Center the bars:
-    internalPosCount = i - ((NumStacksPerGroup+1) / 2);
-    
-    % Offset the group draw positions:
-    groupDrawPos = (internalPosCount)* groupOffset + groupBins;
-    
-    h(i,:) = bar(Y, 'stacked', 'HandleVisibility', 'off');
-    set(h(i,:),'BarWidth',groupOffset);
-    set(h(i,:),'XData',groupDrawPos);
-    
-    % ---- color stacks within THIS bar ----
-    for k = 1:size(Y,2)   % stack elements
-        % h(i,k).FaceColor = barColors(i,:);
-        h(i,k).FaceColor = barColors{i};
-        h(i,k).FaceAlpha = stackAlpha(k);
-        h(i,k).EdgeColor = 'none';
-    end
-
-end
-hold off
-set(gca,'XTickMode','manual');
-set(gca,'XTick',1:NumGroupsPerAxis);
-set(gca,'XTickLabelMode','manual');
-set(gca,'XTickLabel',groupLabels);
-end 

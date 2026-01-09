@@ -1,624 +1,263 @@
-%% Looking at RMS/STD of motion
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% OFFSHORE TURBINES: STD OF DYNAMICS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Looking at RMS/STD of motion across floating wind farm
+% Code plots RMS of different degrees-of-freedom and saves matfile with all
+% values, with units and normalized by wave-size
+
 % Zein Sadek
+% 1/25
 
 clear; close all; clc;
 addpath("/Users/zeinsadek/Documents/MATLAB/MatlabFunctions")
 addpath("/Users/zeinsadek/Documents/MATLAB/colormaps")
+addpath('/Users/zeinsadek/Documents/MATLAB/colormaps/slanCM')
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % IMPORT TRACKING
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+% Paths
 offshore_path = "/Users/zeinsadek/Desktop/Experiments/Offshore";
-power_path = fullfile(offshore_path, "Power/Data/Matfiles");
 tracking_path = fullfile(offshore_path, "Tracking/Data/Matfiles");
 
+% Farm layout + Data filter version
 farm_arrangement = "Staggered";
+harmonic_cutoff = 5;
 
-% Load all spacings
+
+% Number of turbines based on arrangement
+turbine_catalog.Inline.turbines = 1:12;
+turbine_catalog.Staggered.turbines = 1:10;
+
+% Center turbines based on arrangement
+turbine_catalog.Inline.centers = [2,5,8,10];
+turbine_catalog.Staggered.centers = [2,4,7,9];
+
+% Get farm layout info
+turbines = turbine_catalog.(farm_arrangement).turbines;
+centers = turbine_catalog.(farm_arrangement).centers;
+
+% Farm spacings
 farm_spacings = [5, 4.5, 4, 3.5, 3];
 
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    caze = strcat("WT60_", farm_spacing, "_AG0");
-    fprintf('%s\n', caze)
-    
-    % Import Tracking
-    tracking_file = fullfile(tracking_path, farm_arrangement, strcat(caze, ".mat"));
-    tmp = load(tracking_file);
-    tmp = tmp.(caze);
+% Load tracking
+tracking_file = sprintf('OffshoreTracking_AllDataCombined_SavitskyGolay_Cutoff_%1.0f.mat', harmonic_cutoff);
+full_tracking = load(fullfile(tracking_path, "AllData", tracking_file));
+full_tracking = full_tracking.tracking;
 
-    tmp_tracking.(farm_spacing) = tmp;
+% Load Savitsky-Golay filter design
+filterspecs = full_tracking.FilterDesign;
 
-    clear s caze tracking_file tmp
-end
-clear tracking_path 
+% Load data for specific layout
+tracking = full_tracking.(farm_arrangement);
 
-% Convert fieldnames into arry for turbines in tracking structure to match
-% power
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    caze = strcat("WT60_", farm_spacing, "_AG0");
-    fprintf('%s\n', caze)
-    tmp = tmp_tracking.(farm_spacing);
+clear offshore_path tracking_file
 
-    waves = fieldnames(tmp);
-    turbines = fieldnames(tmp.(waves{1}));
 
-    for w = 1:length(waves)
-        wave = waves{w};
-        disp(wave)
-        for t = 1:length(turbines)
-            turbine = turbines{t};
-            tracking.(farm_spacing).(wave)(t) = tmp_tracking.(farm_spacing).(wave).(turbine);
-        end
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% WAVE INFORMATION AND NAMING CONVENTIONS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    end
-end
+% Farm arrangements
+farm_arrangements = {"Inline", "Staggered"};
 
-clear wave turbine w t tmp_tracking
-
+% Wave forcing frequencies
 forcing_frequencies.("LM5")  = 1.4273;
 forcing_frequencies.("LM4")  = 1.6075;
 forcing_frequencies.("LM33") = 1.7651;
 forcing_frequencies.("LM3")  = 1.8617;
 forcing_frequencies.("LM25") = 2.0402;
 forcing_frequencies.("LM2")  = 2.2813;
+% Wavelengths
+wavelengths_from_string.("LM5")  = 5;
+wavelengths_from_string.("LM4")  = 4;
+wavelengths_from_string.("LM33") = (5 / 1.5);
+wavelengths_from_string.("LM3")  = 3;
+wavelengths_from_string.("LM25") = 2.5;
+wavelengths_from_string.("LM2")  = 2;
+% Steepnesses
+steepesses_from_string.("AK12") = 0.12;
+steepesses_from_string.("AK09") = 0.09;
+steepesses_from_string.("AK06") = 0.06;
 
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% CORRECT COORDINATE SYSTEM
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-fillmethod = 'spline';
-
-clc;
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    caze = strcat("WT60_", farm_spacing, "_AG0");
-    fprintf('%s\n', caze)
-    
-    tmp = tracking.(farm_spacing);
-    waves = fieldnames(tmp);
-
-    for w = 1:length(waves)
-        wave = waves{w};
-        for t = 1:length(turbines)
-    
-            % Time
-            corrected_tracking.(farm_spacing).(wave)(t).time = tracking.(farm_spacing).(wave)(t).time;
-    
-            % Raw
-            % Convert cm to m
-            corrected_tracking.(farm_spacing).(wave)(t).x = fillmissing(tracking.(farm_spacing).(wave)(t).x, fillmethod) .* 1E-2;
-            corrected_tracking.(farm_spacing).(wave)(t).y = fillmissing(tracking.(farm_spacing).(wave)(t).z, fillmethod) .* 1E-2;
-            corrected_tracking.(farm_spacing).(wave)(t).z = fillmissing(-1 * tracking.(farm_spacing).(wave)(t).y, fillmethod) .* 1E-2;
-    
-            % Rotation in degrees
-            corrected_tracking.(farm_spacing).(wave)(t).roll = fillmissing(tracking.(farm_spacing).(wave)(t).roll, fillmethod);
-            corrected_tracking.(farm_spacing).(wave)(t).pitch = fillmissing(-1 * tracking.(farm_spacing).(wave)(t).pitch, fillmethod);
-            corrected_tracking.(farm_spacing).(wave)(t).yaw = fillmissing(tracking.(farm_spacing).(wave)(t).yaw, fillmethod);
-            
-            % Kalman
-            % Convert cm to m
-            corrected_tracking.(farm_spacing).(wave)(t).x_kal = fillmissing(tracking.(farm_spacing).(wave)(t).x_kal, fillmethod) .* 1E-2;
-            corrected_tracking.(farm_spacing).(wave)(t).y_kal = fillmissing(tracking.(farm_spacing).(wave)(t).z_kal, fillmethod) .* 1E-2;
-            corrected_tracking.(farm_spacing).(wave)(t).z_kal = fillmissing(-1 * tracking.(farm_spacing).(wave)(t).y_kal, fillmethod) .* 1E-2;
-    
-            % Rotation in degrees
-            corrected_tracking.(farm_spacing).(wave)(t).roll_kal = fillmissing(tracking.(farm_spacing).(wave)(t).roll_kal, fillmethod);
-            corrected_tracking.(farm_spacing).(wave)(t).pitch_kal = fillmissing(-1 * tracking.(farm_spacing).(wave)(t).pitch_kal, fillmethod);
-            corrected_tracking.(farm_spacing).(wave)(t).yaw_kal = fillmissing(tracking.(farm_spacing).(wave)(t).yaw_kal, fillmethod);
-    
-        end
-    end
-end
-
-
-% Replace with correct signs
-clear tracking w t
-tracking = corrected_tracking;
-
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% COMPUTE STD OF EACH DOF
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
+% Degrees of freedom to loop over
 DOFs = {'x_kal', 'y_kal', 'z_kal', 'roll_kal', 'pitch_kal', 'yaw_kal'};
-
-clc;
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    caze = strcat("WT60_", farm_spacing, "_AG0");
-    fprintf('%s\n', caze)
-    
-    tmp = tracking.(farm_spacing);
-    waves = fieldnames(tmp);
-
-    % Loop through waves
-    for w = 1:length(waves)
-        wave = waves{w};
-
-        % Loop through DOFs
-        for d = 1:length(DOFs)
-            DOF = DOFs{d};
-
-            % Loop through turbines
-            for t = 1:length(turbines)
-                % Compute standard deviation
-                deviations.(farm_spacing).(wave)(t).(DOF) = std(tracking.(farm_spacing).(wave)(t).(DOF), 0, 'all', 'omitnan');
-            end
-        end
-    end
-end
-
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% NOMENCLATURE FOR DOFS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% DOF names
-names.x_kal = 'Surge';
-names.y_kal = 'Heave';
-names.z_kal = 'Sway';
-names.roll_kal = 'Roll';
-names.pitch_kal = 'Pitch';
-names.yaw_kal = 'Yaw';
-
-% DOF symbols
-symbs.x_kal = 'x';
-symbs.y_kal = 'y';
-symbs.z_kal = 'z';
-symbs.roll_kal = '\phi';
-symbs.pitch_kal = '\theta';
-symbs.yaw_kal = '\psi';
-
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% BAR CHARTS PER DOF + SINGLE STEEPNESS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-wavelengths = [5,4,3,2];
-wave_steepness = 0.12;
-steep = compose('%02d', round(100 * wave_steepness));
-turbine = 8;
-DOF = 'y_kal';
-
-name = names.(DOF);
-symb = symbs.(DOF);
-
-% Get proper units
-if ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
-    units = '[Deg]';
-else
-    units = '[m]';
-end
-
-wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
-tmp = nan(length(farm_spacings), length(wavelengths));
-
-% Create legend names for each wave case
-legend_names = {};
-for i = 1:length(wavelengths)
-    wave = wavelengths(i);
-    if wave ~= 0
-        legend_names{i} = ['$\lambda = ', num2str(wave), 'D$'];
-    else
-        legend_names{i} = 'No Waves';
-    end
-end
-
-
-% Generate array for bar chart
-clc;
-clear tmp
-for s = 1:length(farm_spacings)
-    farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-    caze = strcat("WT60_", farm_spacing, "_AG0");
-    fprintf('%s\n', caze)
-
-    for w = 1:length(wavelengths)
-        wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
-        tmp(s,w) = deviations.(farm_spacing).(wave)(turbine).(DOF);
-    end
-end
-
-% Plot
-figure('color', 'white')
-hb = bar(farm_spacings, tmp);
-ax = gca;
-box(ax, 'off');
-
-% Color each wave case
-for w = 1:length(hb)
-    hb(w).FaceColor = wave_colors{w};
-    hb(w).EdgeColor = 'none';
-end
-
-% Labels
-% ylim([0, 10])
-ylabel(sprintf('$\\sigma_{%s}$ %s', symb, units), 'interpreter', 'latex', 'fontsize', 14)
-xlabel('$S_x / D$', 'interpreter', 'latex')
-legend(legend_names, 'interpreter', 'latex', 'box', 'off')
-
-title(sprintf('%s Floating Wind Farm: %s $(%s)$ Standard Deviation, $ak = %1.2f$', farm_arrangement, name, symb, wave_steepness), 'Interpreter', 'latex')
-
-
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% BAR CHARTS PER DOF + LOOPED OVER ALL STEEPNESSES
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% wavelengths = [5,4,3,2];
-% wave_steepnesses = [0.06, 0.09, 0.12];
-% turbine = 8;
-% DOF = 'pitch_kal';
-% wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
-% 
-% % Create legend names for each wave case
-% legend_names = {};
-% for i = 1:length(wavelengths)
-%     wave = wavelengths(i);
-%     if wave ~= 0
-%         legend_names{i} = ['$\lambda = ', num2str(wave), 'D$'];
-%     else
-%         legend_names{i} = 'No Waves';
-%     end
-% end
-% 
-% % Properly name DOF
-% % Rotations
-% name = names.(DOF);
-% symb = symbs.(DOF);
-% 
-% % Get proper units
-% if ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
-%     units = '[Deg]';
-% else
-%     units = '[m]';
-% end
-% 
-% figure('color', 'white')
-% t = tiledlayout(length(wave_steepnesses), 1);
-% sgtitle(sprintf('%s Floating Wind Farm: %s $(%s)$ Standard Deviation', farm_arrangement, name, symb), 'Interpreter', 'latex')
-% 
-% % Loop through steepnesses
-% for st = 1:length(wave_steepnesses)
-%     wave_steepness = wave_steepnesses(st);
-%     steep = compose('%02d', round(100 * wave_steepness));
-% 
-%     tmp = nan(length(farm_spacings), length(wavelengths));
-% 
-% 
-%     % Generate array for bar chart
-%     clc;
-%     clear tmp
-%     for s = 1:length(farm_spacings)
-%         farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-%         caze = strcat("WT60_", farm_spacing, "_AG0");
-%         fprintf('%s\n', caze)
-% 
-%         for w = 1:length(wavelengths)
-%             wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
-%             tmp(s,w) = deviations.(farm_spacing).(wave)(turbine).(DOF);
-%         end
-%     end
-% 
-%     % Plot
-%     h(st) = nexttile;
-%     hb = bar(farm_spacings, tmp);
-%     ax = gca;
-%     box(ax, 'off');
-%     title(sprintf('$ak = %1.2f$', wave_steepness), 'interpreter', 'latex')
-% 
-%     % Color each wave case
-%     for w = 1:length(hb)
-%         hb(w).FaceColor = wave_colors{w};
-%         hb(w).EdgeColor = 'none';
-%     end
-% 
-%     % Legend
-%     if st == 1
-%         legend(legend_names, 'interpreter', 'latex', 'box', 'off', 'location', 'northoutside', 'Orientation', 'horizontal')
-%     end
-% 
-% end
-% 
-% ylabel(t, sprintf('$\\sigma_{%s}$ %s', symb, units), 'interpreter', 'latex', 'fontsize', 14)
-% xlabel(t, '$S_x / D$', 'interpreter', 'latex')
-% linkaxes(h, 'xy')
-
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PLOTTING AGAINST HARMONIC RATIO: ALL STEEPNESSES
-% SINGLE DOF
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% clc;
-% wavelengths = [5,4,3,2];
-% wave_steepnesses = [0.06, 0.09, 0.12];
-% turbine = 8;
-% DOF = 'yaw_kal';
-% 
-% % Properly name DOF
-% name = names.(DOF);
-% symb = symbs.(DOF);
-% 
-% % Get proper units
-% if ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
-%     units = '[Deg]';
-% else
-%     units = '[m]';
-% end
-% 
-% wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
-% 
-% % Create legend names for each wave case
-% legend_names = {};
-% for i = 1:length(wavelengths)
-%     wave = wavelengths(i);
-%     if wave ~= 0
-%         legend_names{i} = ['$\lambda = ', num2str(wave), 'D$'];
-%     else
-%         legend_names{i} = 'No Waves';
-%     end
-% end
-% 
-% 
-% clear tmp
-% steepness_alpha = [0.3, 0.6, 1];
-% sz = 100;
-% spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
-% 
-% figure('color','white');
-% hold on 
-% for st = 1:length(wave_steepnesses)
-%     wave_steepness = wave_steepnesses(st);
-%     steep = compose('%02d', round(100 * wave_steepness));
-%     disp(steep)
-%     tmp = nan(length(farm_spacings), length(wavelengths));
-%     for s = 1:length(farm_spacings)
-%         farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-%         caze = strcat("WT60_", farm_spacing, "_AG0");
-%         fprintf('%s\n', caze)
-% 
-%         for w = 1:length(wavelengths)
-%             wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
-%             tmp(s,w) = deviations.(farm_spacing).(wave)(turbine).(DOF);
-%         end
-%     end
-% 
-% 
-%     % Plot
-%     for s = 1:length(farm_spacings)
-%         farm_spacing_str = ['SX', num2str(farm_spacings(s) * 10)];
-%         fprintf('%s\n', farm_spacing_str)
-% 
-%         for w = 1:length(wavelengths)
-%             harmonic_ratio = farm_spacings(s) / wavelengths(w);
-%             scatter(harmonic_ratio, tmp(s,w), sz, spacing_shapes{s}, 'filled', ...
-%                     'MarkerFaceColor', wave_colors{w}, 'MarkerFaceAlpha', steepness_alpha(st))
-%         end
-%     end
-% end
-% 
-% hold off
-% ylabel(sprintf('$\\sigma_{%s}$ %s', symb, units), 'interpreter', 'latex', 'fontsize', 14)
-% xlabel('$S_x / \lambda$', 'Interpreter','latex')
-% xlim([0.4, 2.6])
-
-
-
-
-
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PLOTTING AGAINST HARMONIC RATIO: ALL STEEPNESSES
-% LOOPED OVER ALL DOF
-% NON-NORMALIZED
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-clc;
-wavelengths = [5,4,3,2];
-wave_steepnesses = [0.06, 0.09, 0.12];
-turbine = 8;
-
-steepness_alpha = [0.3, 0.6, 1];
-sz = 100;
-spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
-wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
-
-figure('color','white')
-t = tiledlayout(2,3);
-sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f', farm_arrangement, ceil(turbine / 3)), 'Interpreter', 'latex')
-
-for d = 1:length(DOFs)
-    DOF = DOFs{d};
-    
-    % Properly name DOF
-    name = names.(DOF);
-    symb = symbs.(DOF);
-    
-    % Get proper units
-    if ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
-        units = '[Deg]';
-    else
-        units = '[m]';
-    end
-    
-
-    
-    %%% Plotting
-    clc; clear tmp
-    h(d) = nexttile;
-    title(sprintf('%s: $\\sigma_{%s}$ %s', name, symb, units), 'interpreter', 'latex', 'fontsize', 14)
-    hold on 
-    for st = 1:length(wave_steepnesses)
-        wave_steepness = wave_steepnesses(st);
-        steep = compose('%02d', round(100 * wave_steepness));
-        disp(steep{1})
-        
-        for s = 1:length(farm_spacings)
-            farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-            caze = strcat("WT60_", farm_spacing, "_AG0");
-            fprintf('%s\n', caze)
-        
-            for w = 1:length(wavelengths)
-                wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
-                harmonic_ratio = farm_spacings(s) / wavelengths(w);
-                scatter(harmonic_ratio, deviations.(farm_spacing).(wave)(turbine).(DOF), sz, spacing_shapes{s}, 'filled', ...
-                        'MarkerFaceColor', wave_colors{w}, 'MarkerFaceAlpha', steepness_alpha(st), ...
-                        'HandleVisibility', 'off')
-            end
-        end
-    end
-
-
-
-    %%% Legend
-    if d == 1
-        % Legend for color
-        for w = 1:length(wavelengths)
-            plot(nan, nan, 'Color', wave_colors{w}, 'linewidth', 3, ...
-                'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
-        end
-
-        % White space
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-
-        % Legend for marker shape
-        for s = 1:length(farm_spacings)
-            scatter(nan, nan, sz, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
-                    'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
-        end
-
-        % White space
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-
-        % Legend for marker alpha
-        for st = 1:length(wave_steepnesses)
-            scatter(nan, nan, sz, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
-                    'markerfacealpha', steepness_alpha(st), ...
-                    'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
-        end
-
-        leg = legend('interpreter', 'latex', 'box', 'off');
-        leg.Layout.Tile = 'east';
-    end
-    hold off
-end
-xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
-linkaxes(h(1:3), 'y')
-linkaxes(h(4:6), 'y')
-xlim([0.5, 2.6])
-
-
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PLOTTING AGAINST HARMONIC RATIO: ALL STEEPNESSES
-% LOOPED OVER ALL DOF
-% NORMALIZED BY AMPLITUDE AND STEEPNESS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-clc;
-wavelengths = [5,4,3,2];
-wave_steepnesses = [0.06, 0.09, 0.12];
-turbine = 8;
-
+% Plotting nomenclature: DOF names
+DOF_names.x_kal = 'Surge';
+DOF_names.y_kal = 'Heave';
+DOF_names.z_kal = 'Sway';
+DOF_names.roll_kal = 'Roll';
+DOF_names.pitch_kal = 'Pitch';
+DOF_names.yaw_kal = 'Yaw';
+% Plotting nomenclature: DOF symbols
+DOF_symbs.x_kal = 'x';
+DOF_symbs.y_kal = 'y';
+DOF_symbs.z_kal = 'z';
+DOF_symbs.roll_kal = '\phi';
+DOF_symbs.pitch_kal = '\theta';
+DOF_symbs.yaw_kal = '\psi';
+% Types of motion
 translations = {'x_kal', 'y_kal', 'z_kal'};
 rotations = {'roll_kal', 'pitch_kal', 'yaw_kal'};
 
-steepness_alpha = [0.3, 0.6, 1];
-sz = 100;
-spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
-wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
 
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PLOTTING PROPERTIES AND CONSTANTS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Wavelengths and steepnesses to loop over
+wavelengths = [5,4,3,2];
+wave_steepnesses = [0.06, 0.09, 0.12];
+
+% Colors per row
+row_colors.Row1 = flipud(slanCM(45, 2 * length(wavelengths)));
+row_colors.Row2 = flipud(slanCM(47, 2 * length(wavelengths)));
+row_colors.Row3 = flipud(slanCM(34, 2 * length(wavelengths)));
+row_colors.Row4 = flipud(slanCM(35, 2 * length(wavelengths)));
+
+% Scatter plot nomenclature
+marker_size = 100;
+steepness_alpha = [0.3, 0.6, 1];
+spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% COMPUTE STD OF EACH DOF: BOTH INLINE & STAGGERED
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+clc; fprintf('Computing STD...\n\n')
+% Loop through farm arrangements
+for a = 1:length(farm_arrangements)
+    arrangement = farm_arrangements{a};
+
+    % Loop through different farm spacings
+    for s = 1:length(farm_spacings)
+        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+        caze = strcat("WT60_", farm_spacing, "_AG0");
+        fprintf('%s: %s\n', arrangement, caze)
+        
+        % Get waves available for each case
+        waves = fieldnames(full_tracking.(arrangement).(farm_spacing));
+    
+        % Loop through waves
+        for w = 1:length(waves)
+            wave = waves{w};
+    
+            % Loop through DOFs
+            for d = 1:length(DOFs)
+                DOF = DOFs{d};
+    
+                % Loop through turbines
+                for t = 1:length(turbine_catalog.(arrangement).turbines)
+    
+                    % Compute standard deviation
+                    signal = full_tracking.(arrangement).(farm_spacing).(wave)(t).(DOF);
+                    deviations.(arrangement).(farm_spacing).(wave)(t).(DOF) = std(signal, 0, 'all', 'omitnan');
+                end
+            end
+        end
+    end
+    fprintf('\n')
+end
+
+% Save STD to matfile for book-keeping and later coupling analysis
+fprintf('\n')
+save_path = fullfile(tracking_path, 'StandardDeviations', sprintf('OffshoreTracking_FullSTD_SavitskyGolay_Cutoff_%1.0f.mat', harmonic_cutoff));
+fprintf('Saving Standard Deviations Data...\n')
+save(save_path, 'deviations')
+fprintf('Done Saving!\n\n')
+
+% Only consider deviations from specific arrangement
+deviations = deviations.(farm_arrangement);
+
+clear s w d t a farm_spacing caze waves wave DOF save_path arrangement signal
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PLOTTING: NORMALIZED STD AGAINST HARMONIC RATIO
+% LOOPED OVER ALL DOF
+% CONSIDERING A SINGLE TURBINE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Which turbine to plot
+turbine = 2;
+row = turbineRow(turbine, farm_arrangement);
+colors = row_colors.(sprintf('Row%1.0f', row));
+
+% Plotting
+clc; close all
 figure('color','white')
 t = tiledlayout(2,3);
-sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f', farm_arrangement, ceil(turbine / 3)), 'Interpreter', 'latex')
+sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f Normalized STD', farm_arrangement, row), 'Interpreter', 'latex')
 
+% Loop through DOF
 for d = 1:length(DOFs)
     DOF = DOFs{d};
     
     % Properly name DOF
-    name = names.(DOF);
-    symb = symbs.(DOF);
-    
-    % Get proper units
-    if ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
-        units = '[Deg]';
-    else
-        units = '[m]';
-    end
-
-    % Normalization symboles
-    if ismember(DOF, translations)
-        norm_symb = 'a';
-    elseif ismember(DOF, rotations)
-        norm_symb = 'ak';
-    end
-    
-
-
-    %%% Plotting
-    clc; clear tmp
+    name = DOF_names.(DOF);
+    symb = DOF_symbs.(DOF);
+    norm_symb = getDOFnormalization(DOF);
+   
+    % Plotting
     h(d) = nexttile;
-    title(sprintf('%s: $\\sigma_{%s} / %s$ [~]', name, symb, norm_symb), 'interpreter', 'latex', 'fontsize', 14)
+    title(sprintf('%s: $\\sigma_{%s} / %s$', name, symb, norm_symb), 'interpreter', 'latex', 'fontsize', 14)
     hold on 
-    for st = 1:length(wave_steepnesses)
-        wave_steepness = wave_steepnesses(st);
-        steep = compose('%02d', round(100 * wave_steepness));
-        disp(steep{1})
-        
-        for s = 1:length(farm_spacings)
-            farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-            caze = strcat("WT60_", farm_spacing, "_AG0");
-            fprintf('%s\n', caze)
-        
+
+    % Loop through farm spacings
+    for s = 1:length(farm_spacings)
+        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+        available_wave_cases = fieldnames(tracking.(farm_spacing));
+
+        % Loop through wave steepesses
+        for st = 1:length(wave_steepnesses)
+            wave_steepness = wave_steepnesses(st);
+            steep = compose('%02d', round(100 * wave_steepness));
+
+            % Loop through wavelengths
             for w = 1:length(wavelengths)
                 wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
-                harmonic_ratio = farm_spacings(s) / wavelengths(w);
 
-                % Normalizations
-                if ismember(DOF, translations)
-                    amplitude = (wave_steepness * wavelengths(w) * 0.15) / (2 * pi);
-                    normalization = amplitude;
-                    norm_symb = 'a';
-        
-                elseif ismember(DOF, rotations)
-                    normalization = wave_steepness;
-                    norm_symb = 'ak';
-                end
-
-                % Convert rotations into rad
-                if ismember(DOF, rotations)
-                    scatter(harmonic_ratio, deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization, sz, spacing_shapes{s}, 'filled', ...
-                            'Marker', spacing_shapes{s}, ...
-                            'MarkerFaceColor', wave_colors{w}, ...
-                            'MarkerFaceAlpha', steepness_alpha(st), ...
-                            'HandleVisibility','off');
-                % Leave translations as is
-                else
-                    scatter(harmonic_ratio, deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization, sz, spacing_shapes{s}, 'filled', ...
-                            'Marker', spacing_shapes{s}, ...
-                            'MarkerFaceColor', wave_colors{w}, ...
-                            'MarkerFaceAlpha', steepness_alpha(st), ...
-                            'HandleVisibility','off');
+                % Check that wave case is available in tracking data
+                if ismember(wave, available_wave_cases)
+                    harmonic_ratio = farm_spacings(s) / wavelengths(w);
+    
+                    % Normalizations
+                    if ismember(DOF, translations)
+                        amplitude = (wave_steepness * wavelengths(w) * 0.15) / (2 * pi);
+                        normalization = amplitude;
+                    elseif ismember(DOF, rotations)
+                        normalization = wave_steepness;
+                    end
+    
+                    % Convert rotations into rad
+                    if ismember(DOF, rotations)
+                        scatter(harmonic_ratio, deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization, marker_size, spacing_shapes{s}, 'filled', ...
+                                'Marker', spacing_shapes{s}, ...
+                                'MarkerFaceColor', colors(w,:), ...
+                                'MarkerFaceAlpha', steepness_alpha(st), ...
+                                'HandleVisibility','off');
+    
+                    % Leave translations as is
+                    else
+                        scatter(harmonic_ratio, deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization, marker_size, spacing_shapes{s}, 'filled', ...
+                                'Marker', spacing_shapes{s}, ...
+                                'MarkerFaceColor', colors(w,:), ...
+                                'MarkerFaceAlpha', steepness_alpha(st), ...
+                                'HandleVisibility','off');
+                    end
                 end
             end
         end
     end
 
-
-
-    %%% Legend (Pro shit)
+    % Legend
     if d == 1
         % Legend for color
         for w = 1:length(wavelengths)
-            plot(nan, nan, 'Color', wave_colors{w}, 'linewidth', 3, ...
+            plot(nan, nan, 'Color', colors(w,:), 'linewidth', 3, ...
                 'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
         end
 
@@ -628,7 +267,7 @@ for d = 1:length(DOFs)
 
         % Legend for marker shape
         for s = 1:length(farm_spacings)
-            scatter(nan, nan, sz, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
+            scatter(nan, nan, marker_size, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
                     'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
         end
 
@@ -638,7 +277,7 @@ for d = 1:length(DOFs)
 
         % Legend for marker alpha
         for st = 1:length(wave_steepnesses)
-            scatter(nan, nan, sz, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
+            scatter(nan, nan, marker_size, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
                     'markerfacealpha', steepness_alpha(st), ...
                     'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
         end
@@ -651,186 +290,205 @@ end
 xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
 linkaxes(h, 'xy')
 xlim([0.5, 2.6])
-ylim([0, 2.1])
 
-
+clear d DOF name symb norm_symb h st wave_steepness steep s caze farm_spacing 
+clear w wave harmonic_ratio amplitude normalization leg row turbine t available_wave_cases
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PLOTTING AGAINST HARMONIC RATIO: ALL STEEPNESSES
-% LOOPED OVER ALL DOF
-% NORMALIZED BY AMPLITUDE AND STEEPNESS
-% LOOPED OVER ALL TURBINES
+% PLOTTING: NORMALIZED STD AGAINST HARMONIC RATIO
+% LOOPED OVER ALL CENTER TURBINES
+% CONSIDERING A SINGLE DOF
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% clc;
-% wavelengths = [5,4,3,2];
-% wave_steepnesses = [0.06, 0.09, 0.12];
-% % turbine = 8;
-% turbines_to_plot = 1:12;
-% 
-% % Colors per turbine
-% colors.Row1 = spring(length(wavelengths));
-% colors.Row2 = summer(length(wavelengths));
-% colors.Row3 = autumn(length(wavelengths));
-% colors.Row4 = winter(length(wavelengths));
-% 
-% translations = {'x_kal', 'y_kal', 'z_kal'};
-% rotations = {'roll_kal', 'pitch_kal', 'yaw_kal'};
-% 
-% steepness_alpha = [0.3, 0.6, 1];
-% sz = 100;
-% spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
-% wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
-% 
-% figure('color','white')
-% t = tiledlayout(2,3);
-% sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f', farm_arrangement, ceil(turbine / 3)), 'Interpreter', 'latex')
-% 
-% for d = 1:length(DOFs)
-%     DOF = DOFs{d};
-% 
-%     % Properly name DOF
-%     % Rotations
-%     if contains(DOF, 'pitch')
-%         symb = '\theta';
-%         name = 'Pitch';
-%     elseif contains(DOF, 'roll')
-%         symb = '\phi';
-%         name = 'Roll';
-%     elseif contains(DOF, 'yaw')
-%         symb = '\psi';
-%         name = 'Yaw';
-%     % Translations
-%     elseif contains(DOF, 'x_kal')
-%         symb = 'x';
-%         name = 'Surge';
-%     elseif contains(DOF, 'y_kal')
-%         symb = 'y';
-%         name = 'Sway';
-%     elseif contains(DOF, 'z_kal')
-%         symb = 'z';
-%         name = 'Heave';
-%     end
-% 
-%     % Get proper units
-%     if ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
-%         units = '[Deg]';
-%     else
-%         units = '[m]';
-%     end
-% 
-%     % Normalization symboles
-%     if ismember(DOF, translations)
-%         norm_symb = 'a';
-%     elseif ismember(DOF, rotations)
-%         norm_symb = 'ak';
-%     end
-% 
-% 
-% 
-%     %%% Plotting
-%     clc; clear tmp
-%     h(d) = nexttile;
-%     title(sprintf('%s: $\\sigma_{%s} / %s$ [~]', name, symb, norm_symb), 'interpreter', 'latex', 'fontsize', 14)
-%     hold on 
-%     for ts = 1:length(turbines_to_plot)
-%         turbine = turbines_to_plot(ts);
-%         row_tag = strcat('Row', num2str(ceil(turbine / 3)));
-% 
-%         for st = 1:length(wave_steepnesses)
-%             wave_steepness = wave_steepnesses(st);
-%             steep = compose('%02d', round(100 * wave_steepness));
-%             disp(steep{1})
-% 
-%             for s = 1:length(farm_spacings)
-%                 farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-%                 caze = strcat("WT60_", farm_spacing, "_AG0");
-%                 fprintf('%s\n', caze)
-% 
-%                 for w = 1:length(wavelengths)
-%                     wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
-%                     harmonic_ratio = farm_spacings(s) / wavelengths(w);
-% 
-%                     % Normalizations
-%                     if ismember(DOF, translations)
-%                         amplitude = (wave_steepness * wavelengths(w) * 0.15) / (2 * pi);
-%                         normalization = amplitude;
-%                         norm_symb = 'a';
-% 
-%                     elseif ismember(DOF, rotations)
-%                         normalization = wave_steepness;
-%                         norm_symb = 'ak';
-%                     end
-% 
-%                     % Convert rotations into rad
-%                     if ismember(DOF, rotations)
-%                         scatter(harmonic_ratio, deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization, sz, spacing_shapes{s}, 'filled', ...
-%                                 'Marker', spacing_shapes{s}, ...
-%                                 'MarkerFaceColor', colors.(row_tag)(w,:), ...
-%                                 'MarkerFaceAlpha', steepness_alpha(st), ...
-%                                 'HandleVisibility','off');
-%                     % Leave translations as is
-%                     else
-%                         scatter(harmonic_ratio, deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization, sz, spacing_shapes{s}, 'filled', ...
-%                                 'Marker', spacing_shapes{s}, ...
-%                                 'MarkerFaceColor', colors.(row_tag)(w,:), ...
-%                                 'MarkerFaceAlpha', steepness_alpha(st), ...
-%                                 'HandleVisibility','off');
-%                     end
-%                 end
-%             end
-%         end
-%     end
+% Which DOF to plot
+DOF = 'roll_kal';
+name = DOF_names.(DOF);
+symb = DOF_symbs.(DOF);
+norm_symb = getDOFnormalization(DOF);
+
+% Plotting
+clc; close all
+figure('color','white')
+t = tiledlayout(1,length(centers));
+sgtitle(sprintf('%s Floating Wind Farm %s ($%s$) Normalized STD: $\\sigma_{%s} / %s$', farm_arrangement, name, DOF_symbs.(DOF), symb, norm_symb), 'interpreter', 'latex', 'fontsize', 14)
+
+% Loop through center turbines
+for c = 1:length(centers)
+    
+    % Get turbine
+    turbine = centers(c);
+    colors = row_colors.(sprintf('Row%1.0f', c));
+    
+    % Plotting
+    h(c) = nexttile;
+    title(sprintf('Row %1.0f', c))
+    hold on 
+
+    % Loop through farm spacings
+    for s = 1:length(farm_spacings)
+        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+        available_wave_cases = fieldnames(tracking.(farm_spacing));
+
+        % Loop through wave steepnesses
+        for st = 1:length(wave_steepnesses)
+            wave_steepness = wave_steepnesses(st);
+            steep = compose('%02d', round(100 * wave_steepness));
+        
+            % Loop through wavelengths
+            for w = 1:length(wavelengths)
+                wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
+                harmonic_ratio = farm_spacings(s) / wavelengths(w);
+
+                % Check that wave case is available in tracking data
+                if ismember(wave, available_wave_cases)
+
+                    % Normalizations
+                    if ismember(DOF, translations)
+                        amplitude = (wave_steepness * wavelengths(w) * 0.15) / (2 * pi);
+                        normalization = amplitude;
+            
+                    elseif ismember(DOF, rotations)
+                        normalization = wave_steepness;
+                    end
+    
+                    % Convert rotations into rad
+                    if ismember(DOF, rotations)
+                        scatter(harmonic_ratio, deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization, marker_size, spacing_shapes{s}, 'filled', ...
+                                'Marker', spacing_shapes{s}, ...
+                                'MarkerFaceColor', colors(w,:), ...
+                                'MarkerFaceAlpha', steepness_alpha(st), ...
+                                'HandleVisibility','off');
+    
+                    % Leave translations as is
+                    else
+                        scatter(harmonic_ratio, deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization, marker_size, spacing_shapes{s}, 'filled', ...
+                                'Marker', spacing_shapes{s}, ...
+                                'MarkerFaceColor', colors(w,:), ...
+                                'MarkerFaceAlpha', steepness_alpha(st), ...
+                                'HandleVisibility','off');
+                    end
+                end
+            end
+        end
+    end
+
+    % Legend
+    if c == 1
+        % Legend for color
+        for w = 1:length(wavelengths)
+            plot(nan, nan, 'Color', colors(w,:), 'linewidth', 3, ...
+                'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
+        end
+
+        % White space
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+
+        % Legend for marker shape
+        for s = 1:length(farm_spacings)
+            scatter(nan, nan, marker_size, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
+                    'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
+        end
+
+        % White space
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+
+        % Legend for marker alpha
+        for st = 1:length(wave_steepnesses)
+            scatter(nan, nan, marker_size, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
+                    'markerfacealpha', steepness_alpha(st), ...
+                    'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
+        end
+
+        leg = legend('interpreter', 'latex', 'box', 'off');
+        leg.Layout.Tile = 'east';
+    end
+    hold off
+end
+xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
+linkaxes(h, 'xy')
+xlim([0.5, 2.6])
+% ylim([0, 2])
+
+clear d DOF name symb norm_symb h st wave_steepness steep s caze farm_spacing c
+clear w wave harmonic_ratio amplitude normalization leg row turbine t available_wave_cases
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% FUNCTIONS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+function row = turbineRow(turbineID, layout)
+    % turbineRow: Figures out which row a turbine is in for both inline and
+    % staggered configurations
+
+    switch layout
+        case 'Inline'
+            row = ceil(turbineID / 3);
+        case 'Staggered'
+            rowSizes = [3 2 3 2];
+            rowEdges = [0 cumsum(rowSizes)];
+            row = find(turbineID > rowEdges(1:end-1) & ...
+                       turbineID <= rowEdges(2:end));
+        otherwise
+            error('Unknown layout type')
+    end
+end
 
 
 
-    % %%% Legend (Pro shit)
-    % if d == 1
-    %     % Legend for color
-    %     for w = 1:length(wavelengths)
-    %         plot(nan, nan, 'Color', wave_colors{w}, 'linewidth', 3, ...
-    %             'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
-    %     end
-    % 
-    %     % White space
-    %     plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-    %     plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-    % 
-    %     % Legend for marker shape
-    %     for s = 1:length(farm_spacings)
-    %         scatter(nan, nan, sz, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
-    %                 'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
-    %     end
-    % 
-    %     % White space
-    %     plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-    %     plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-    % 
-    %     % Legend for marker alpha
-    %     for st = 1:length(wave_steepnesses)
-    %         scatter(nan, nan, sz, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
-    %                 'markerfacealpha', steepness_alpha(st), ...
-    %                 'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
-    %     end
-    % 
-    %     leg = legend('interpreter', 'latex', 'box', 'off');
-    %     leg.Layout.Tile = 'east';
-    % end
-%     hold off
-% end
-% xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
-% linkaxes(h, 'xy')
-% xlim([0.5, 2.6])
-% ylim([0, 2.5])
+function output = getwaveproperties(wave)
+    % getwaveproperties: Reads wave case name and returns wavelength,
+    % steepness, and forcing frequency
+
+    % Split wave name at underscore
+    tmp = split(wave, '_');
+    wavelength_string = tmp{1};
+    steepness_string = tmp{2};
+
+    % Get wavelengths and steepness from strings
+    wavelength = wavelength_from_string.(wavelength_string);
+    steepness = steepness_from_string.(steepness_string);
+
+    % Get wave amplitude from steepness and wavelength
+    amplitude = (steepness * wavelength * 0.15) / (2 * pi);
+
+    % Returned values
+    output.wavelength = wavelength;
+    output.steepness = steepness;
+    output.frequency = forcing_frequencies.(wavelength);
+    output.amplitude = amplitude;
+end
 
 
 
+function unit = getDOFunits(DOF)
+    % getDOFunits: scans input DOF string and outputs the corresponding
+    % units
+
+    % Get proper units
+    if ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
+        unit = '[Deg]';
+    elseif ismember(DOF, {'x_kal', 'y_kal', 'x_kal'})
+        unit = '[m]';
+    end
+end
 
 
 
+function norm_symb = getDOFnormalization(DOF)
+    % getDOFnormalization: scans input DOF string and outputs the
+    % corresponding normalizatio unit
 
-
+    if ismember(DOF, {'x_kal', 'y_kal', 'z_kal'})
+        norm_symb = 'a';
+    elseif ismember(DOF, {'pitch_kal', 'roll_kal', 'yaw_kal'})
+        norm_symb = 'ak';
+    end
+end
 
 
 

@@ -237,97 +237,97 @@ disp(out)
 % SPECIFYING FIXED ROW AND DOF
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-clc;
-fs = 30;          % Hz
-maxLag_s = 10;    % seconds
-
-% Specifying the 'fixed' turbine row and show the max correlation value
-% with all other waked rows
-centers = [2, 5, 8, 12];
-fixed_row = 1;
-DOF = 'pitch_kal';
-
-% Determine waked turbines
-waked_turbines = centers(fixed_row + 1:end);
-num_waked_turbines = length(waked_turbines);
-
-% Plot things
-wave_steepnesses = [0.06, 0.09, 0.12];
-wavelengths = [5,4,3,2];
-steepness_alpha = [0.3, 0.6, 1];
-sz = 100;
-spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
-wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
-
-
-clc; close all
-figure('color', 'white')
-t = tiledlayout(1, num_waked_turbines);
-sgtitle(sprintf('Correlation coefficient of %s ($%s$)', names.(DOF), symbs.(DOF)), 'interpreter', 'latex')
-
-% Loop through waked turbines
-for c = 1:num_waked_turbines
-
-    reference_turbine = centers(fixed_row);
-    correlating_turbine = waked_turbines(c);
-
-    h(c) = nexttile;
-    title(sprintf('Row %1.0f to Row %1.0f', fixed_row, ceil(correlating_turbine / 3)))
-    hold on
-    % Loop through spacings
-    for s = 1:length(farm_spacings)
-        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
-        caze = strcat("WT60_", farm_spacing, "_AG0");
-        fprintf('%s\n', caze)
-        
-        tmp = tracking.(farm_spacing);
-        waves = fieldnames(tmp);
-
-        % Loop through waves
-        for st = 1:length(wave_steepnesses)
-            wave_steepness = wave_steepnesses(st);
-            steep = compose('%02d', round(100 * wave_steepness));
-            disp(steep{1})
-
-            for w = 1:length(wavelengths)
-                % Make wave
-                wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
-                harmonic_ratio = farm_spacings(s) / wavelengths(w);
-
-
-                % Get signals
-                turbine_A_signal = tracking.(farm_spacing).(wave)(reference_turbine).(DOF);
-                turbine_B_signal = tracking.(farm_spacing).(wave)(correlating_turbine).(DOF);
-                
-    
-                % Make the same length
-                n = min(numel(turbine_A_signal), numel(turbine_B_signal));
-                A = turbine_A_signal(1:n);
-                B = turbine_B_signal(1:n);
-    
-    
-                % Cross-correlate
-                out = xcorr_metrics(A, B, fs, maxLag_s);
-    
-                % out.rho_max ~ largest magnitude XC coefficient
-                % out.rho_abs_max ~ abs of largest magnitude XC coefficient
-                % out.tau_max ~ time lag at largest peak
-
-                scatter(harmonic_ratio, out.rho_max, sz, spacing_shapes{s}, 'filled', ...
-                        'MarkerFaceColor', wave_colors{w}, 'markerfacealpha', steepness_alpha(st))
-
-            end
-        end
-    end
-    xline(0.5:1:2.5, 'linestyle', '--')
-    xline(1:1:2, 'linestyle', '-')
-    hold off
-end
-
-linkaxes(h, 'xy')
-xlim([0.4, 2.5])
-xlabel(t, '$S_x / \lambda$', 'interpreter', 'latex')
-ylabel(t, sprintf('$\\rho_{%s}$', symbs.(DOF)), 'interpreter', 'latex')
+% clc;
+% fs = 30;          % Hz
+% maxLag_s = 10;    % seconds
+% 
+% % Specifying the 'fixed' turbine row and show the max correlation value
+% % with all other waked rows
+% centers = [2, 5, 8, 12];
+% fixed_row = 1;
+% DOF = 'pitch_kal';
+% 
+% % Determine waked turbines
+% waked_turbines = centers(fixed_row + 1:end);
+% num_waked_turbines = length(waked_turbines);
+% 
+% % Plot things
+% wave_steepnesses = [0.06, 0.09, 0.12];
+% wavelengths = [5,4,3,2];
+% steepness_alpha = [0.3, 0.6, 1];
+% sz = 100;
+% spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
+% wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
+% 
+% 
+% clc; close all
+% figure('color', 'white')
+% t = tiledlayout(1, num_waked_turbines);
+% sgtitle(sprintf('Correlation coefficient of %s ($%s$)', names.(DOF), symbs.(DOF)), 'interpreter', 'latex')
+% 
+% % Loop through waked turbines
+% for c = 1:num_waked_turbines
+% 
+%     reference_turbine = centers(fixed_row);
+%     correlating_turbine = waked_turbines(c);
+% 
+%     h(c) = nexttile;
+%     title(sprintf('Row %1.0f to Row %1.0f', fixed_row, ceil(correlating_turbine / 3)))
+%     hold on
+%     % Loop through spacings
+%     for s = 1:length(farm_spacings)
+%         farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+%         caze = strcat("WT60_", farm_spacing, "_AG0");
+%         fprintf('%s\n', caze)
+% 
+%         tmp = tracking.(farm_spacing);
+%         waves = fieldnames(tmp);
+% 
+%         % Loop through waves
+%         for st = 1:length(wave_steepnesses)
+%             wave_steepness = wave_steepnesses(st);
+%             steep = compose('%02d', round(100 * wave_steepness));
+%             disp(steep{1})
+% 
+%             for w = 1:length(wavelengths)
+%                 % Make wave
+%                 wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
+%                 harmonic_ratio = farm_spacings(s) / wavelengths(w);
+% 
+% 
+%                 % Get signals
+%                 turbine_A_signal = tracking.(farm_spacing).(wave)(reference_turbine).(DOF);
+%                 turbine_B_signal = tracking.(farm_spacing).(wave)(correlating_turbine).(DOF);
+% 
+% 
+%                 % Make the same length
+%                 n = min(numel(turbine_A_signal), numel(turbine_B_signal));
+%                 A = turbine_A_signal(1:n);
+%                 B = turbine_B_signal(1:n);
+% 
+% 
+%                 % Cross-correlate
+%                 out = xcorr_metrics(A, B, fs, maxLag_s);
+% 
+%                 % out.rho_max ~ largest magnitude XC coefficient
+%                 % out.rho_abs_max ~ abs of largest magnitude XC coefficient
+%                 % out.tau_max ~ time lag at largest peak
+% 
+%                 scatter(harmonic_ratio, out.rho_max, sz, spacing_shapes{s}, 'filled', ...
+%                         'MarkerFaceColor', wave_colors{w}, 'markerfacealpha', steepness_alpha(st))
+% 
+%             end
+%         end
+%     end
+%     xline(0.5:1:2.5, 'linestyle', '--')
+%     xline(1:1:2, 'linestyle', '-')
+%     hold off
+% end
+% 
+% linkaxes(h, 'xy')
+% xlim([0.4, 2.5])
+% xlabel(t, '$S_x / \lambda$', 'interpreter', 'latex')
+% ylabel(t, sprintf('$\\rho_{%s}$', symbs.(DOF)), 'interpreter', 'latex')
 
 
 
@@ -342,12 +342,17 @@ ylabel(t, sprintf('$\\rho_{%s}$', symbs.(DOF)), 'interpreter', 'latex')
 
 clc;
 fs = 30;          % Hz
-maxLag_s = 10;    % seconds
+maxLag_s = 100;   % seconds
 
 % Specifying the 'fixed' turbine row and show the max correlation value
 % with all other waked rows
-centers = [2, 5, 8, 12];
-fixed_row = 1;
+% centers = [2, 5, 8, 12];
+if strcmp(farm_arrangement, 'Inline')
+    centers = [2,5,8,12];
+else
+    centers = [2,4,7,9];
+end
+fixed_row = 2;
 DOF = 'pitch_kal';
 
 % Determine waked turbines
@@ -366,7 +371,7 @@ wave_colors = {'#EC4E20', '#FF9505', '#4C4B63', '#ABA8B2'};
 clc; close all
 figure('color', 'white')
 t = tiledlayout(1, num_waked_turbines);
-sgtitle(sprintf('ABS Correlation coefficient of %s ($%s$)', names.(DOF), symbs.(DOF)), 'interpreter', 'latex')
+sgtitle(sprintf('ABS Correlation coefficient of %s ($%s$): $|\\rho_{%s}|$', names.(DOF), symbs.(DOF), symbs.(DOF)), 'interpreter', 'latex')
 
 % Loop through waked turbines
 for c = 1:num_waked_turbines
@@ -417,10 +422,44 @@ for c = 1:num_waked_turbines
                 % out.tau_max ~ time lag at largest peak
 
                 scatter(harmonic_ratio, out.rho_abs_max, sz, spacing_shapes{s}, 'filled', ...
-                        'MarkerFaceColor', wave_colors{w}, 'markerfacealpha', steepness_alpha(st))
+                        'MarkerFaceColor', wave_colors{w}, 'markerfacealpha', steepness_alpha(st), ...
+                        'HandleVisibility', 'off')
 
             end
         end
+    end
+
+     % %%% Legend
+    if c == 1
+        % Legend for color
+        for w = 1:length(wavelengths)
+            plot(nan, nan, 'Color', wave_colors{w}, 'linewidth', 3, ...
+                'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
+        end
+
+        % White space
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+
+        % Legend for marker shape
+        for s = 1:length(farm_spacings)
+            scatter(nan, nan, sz, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
+                    'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
+        end
+
+        % White space
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+
+        % Legend for marker alpha
+        for st = 1:length(wave_steepnesses)
+            scatter(nan, nan, sz, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
+                    'markerfacealpha', steepness_alpha(st), ...
+                    'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
+        end
+
+        leg = legend('interpreter', 'latex', 'box', 'off');
+        leg.Layout.Tile = 'east';
     end
     hold off
 end
