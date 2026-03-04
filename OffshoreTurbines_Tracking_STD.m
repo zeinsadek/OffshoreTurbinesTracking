@@ -22,8 +22,8 @@ offshore_path = "/Users/zeinsadek/Desktop/Experiments/Offshore";
 tracking_path = fullfile(offshore_path, "Tracking/Data/Matfiles");
 
 % Farm layout + Data filter version
-farm_arrangement = "Staggered";
-harmonic_cutoff = 5;
+farm_arrangement = "Inline";
+harmonic_cutoff = 2;
 
 
 % Number of turbines based on arrangement
@@ -108,19 +108,19 @@ rotations = {'roll_kal', 'pitch_kal', 'yaw_kal'};
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Wavelengths and steepnesses to loop over
-wavelengths = [5,4,3,2];
+wavelengths = [2,3,4,5];
 wave_steepnesses = [0.06, 0.09, 0.12];
 
 % Colors per row
-row_colors.Row1 = flipud(slanCM(45, 2 * length(wavelengths)));
-row_colors.Row2 = flipud(slanCM(47, 2 * length(wavelengths)));
-row_colors.Row3 = flipud(slanCM(34, 2 * length(wavelengths)));
-row_colors.Row4 = flipud(slanCM(35, 2 * length(wavelengths)));
+row_colors.Row1 = flipud(slanCM(45, 2 * length(farm_spacings)));
+row_colors.Row2 = flipud(slanCM(47, 2 * length(farm_spacings)));
+row_colors.Row3 = flipud(slanCM(34, 2 * length(farm_spacings)));
+row_colors.Row4 = flipud(slanCM(35, 2 * length(farm_spacings)));
 
 % Scatter plot nomenclature
 marker_size = 100;
 steepness_alpha = [0.3, 0.6, 1];
-spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
+wave_shapes = {'o', '^', 'square', 'pentagram'};
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -176,13 +176,145 @@ clear s w d t a farm_spacing caze waves wave DOF save_path arrangement signal
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PLOTTING: NORMALIZED STD AGAINST WAVELENGTH
+% LOOPED OVER ALL DOF
+% CONSIDERING A SINGLE TURBINE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Which turbine to plot
+turbine = 9;
+row = turbineRow(turbine, farm_arrangement);
+colors = row_colors.(sprintf('Row%1.0f', row));
+
+% Plotting
+clc; close all
+figure('color','white')
+t = tiledlayout(2,3);
+sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f Normalized STD', farm_arrangement, row), 'Interpreter', 'latex')
+
+% Loop through DOF
+for d = 1:length(DOFs)
+    DOF = DOFs{d};
+    
+    % Properly name DOF
+    name = DOF_names.(DOF);
+    symb = DOF_symbs.(DOF);
+    norm_symb = getDOFnormalization(DOF);
+   
+    % Plotting
+    h(d) = nexttile;
+    title(sprintf('%s ($%s$): $\\sigma_{%s} / %s$', name, symb, symb, norm_symb), 'interpreter', 'latex', 'fontsize', 14)
+    hold on 
+
+    % Loop through farm spacings
+    for s = 1:length(farm_spacings)
+        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+        available_wave_cases = fieldnames(tracking.(farm_spacing));
+
+        % Loop through wave steepesses
+        % for st = 1:length(wave_steepnesses)
+        for st = 1:3
+            wave_steepness = wave_steepnesses(st);
+            steep = compose('%02d', round(100 * wave_steepness));
+
+            % Loop through wavelengths
+            for w = 1:length(wavelengths)
+                wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
+
+                % Check that wave case is available in tracking data
+                if ismember(wave, available_wave_cases)
+    
+                    % Normalizations
+                    if ismember(DOF, translations)
+                        amplitude = (wave_steepness * wavelengths(w) * 0.15) / (2 * pi);
+                        normalization = amplitude;
+                    elseif ismember(DOF, rotations)
+                        normalization = wave_steepness;
+                    end
+    
+                    % Convert rotations into rad
+                    if ismember(DOF, rotations)
+                        scatter(wavelengths(w), deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization, marker_size, 'filled', ...
+                                'Marker', wave_shapes{w}, ...
+                                'MarkerFaceColor', colors(s,:), ...
+                                'MarkerFaceAlpha', steepness_alpha(st), ...
+                                'HandleVisibility','off');
+
+                        tmpX(w) = wavelengths(w);
+                        tmpY(w) = deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization;
+    
+                    % Leave translations as is
+                    else
+                        scatter(wavelengths(w), deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization, marker_size, 'filled', ...
+                                'Marker', wave_shapes{w}, ...
+                                'MarkerFaceColor', colors(s,:), ...
+                                'MarkerFaceAlpha', steepness_alpha(st), ...
+                                'HandleVisibility','off');
+
+                        tmpX(w) = wavelengths(w);
+                        tmpY(w) = deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization;
+                    end
+                end
+            end
+            
+            P = plot(tmpX, tmpY, 'color', colors(s,:), 'linewidth', 1, 'HandleVisibility', 'off');
+            P.Color(4) = steepness_alpha(st);
+
+        end
+    end
+
+    % Legend
+    if d == 1
+        % Legend for color
+        for s = 1:length(farm_spacings)
+            plot(nan, nan, 'Color', colors(s,:), 'linewidth', 3, ...
+                'Displayname', sprintf('$S_x = %1.1fD', farm_spacings(s)), 'HandleVisibility', 'on')
+        end
+
+        % White space
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+
+        % Legend for marker shape
+        for w = 1:length(wavelengths)
+            scatter(nan, nan, marker_size, wave_shapes{w}, 'black', 'filled', 'HandleVisibility', 'on', ...
+                    'DisplayName', sprintf('$\\lambda = %1.0fD$', wavelengths(w)))
+        end
+
+        % White space
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+
+        % Legend for marker alpha
+        for st = 1:length(wave_steepnesses)
+            scatter(nan, nan, marker_size, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
+                    'markerfacealpha', steepness_alpha(st), ...
+                    'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
+        end
+
+        leg = legend('interpreter', 'latex', 'box', 'off');
+        leg.Layout.Tile = 'east';
+    end
+    hold off
+    xticks(2:1:5)
+end
+xlabel(t, '$\lambda / D$', 'Interpreter','latex')
+linkaxes(h, 'xy')
+xlim([1.5, 5.5])
+ylim([0, 2.2])
+
+clear d DOF name symb norm_symb h st wave_steepness steep s caze farm_spacing tmpX tmpY P
+clear w wave harmonic_ratio amplitude normalization leg row turbine t available_wave_cases
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % PLOTTING: NORMALIZED STD AGAINST HARMONIC RATIO
 % LOOPED OVER ALL DOF
 % CONSIDERING A SINGLE TURBINE
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Which turbine to plot
-turbine = 2;
+turbine = 9;
 row = turbineRow(turbine, farm_arrangement);
 colors = row_colors.(sprintf('Row%1.0f', row));
 
@@ -212,7 +344,8 @@ for d = 1:length(DOFs)
         available_wave_cases = fieldnames(tracking.(farm_spacing));
 
         % Loop through wave steepesses
-        for st = 1:length(wave_steepnesses)
+        % for st = 1:length(wave_steepnesses)
+        for st = 3
             wave_steepness = wave_steepnesses(st);
             steep = compose('%02d', round(100 * wave_steepness));
 
@@ -234,31 +367,40 @@ for d = 1:length(DOFs)
     
                     % Convert rotations into rad
                     if ismember(DOF, rotations)
-                        scatter(harmonic_ratio, deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization, marker_size, spacing_shapes{s}, 'filled', ...
-                                'Marker', spacing_shapes{s}, ...
-                                'MarkerFaceColor', colors(w,:), ...
+                        scatter(harmonic_ratio, deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization, marker_size, 'filled', ...
+                                'Marker', wave_shapes{w}, ...
+                                'MarkerFaceColor', colors(s,:), ...
                                 'MarkerFaceAlpha', steepness_alpha(st), ...
                                 'HandleVisibility','off');
+
+                        tmpX(w) = harmonic_ratio;
+                        tmpY(w) = deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization;
     
                     % Leave translations as is
                     else
-                        scatter(harmonic_ratio, deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization, marker_size, spacing_shapes{s}, 'filled', ...
-                                'Marker', spacing_shapes{s}, ...
-                                'MarkerFaceColor', colors(w,:), ...
+                        scatter(harmonic_ratio, deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization, marker_size, 'filled', ...
+                                'Marker', wave_shapes{w}, ...
+                                'MarkerFaceColor', colors(s,:), ...
                                 'MarkerFaceAlpha', steepness_alpha(st), ...
                                 'HandleVisibility','off');
+
+                        tmpX(w) = harmonic_ratio;
+                        tmpY(w) = deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization;
                     end
                 end
             end
+
+            % Connect the dots
+            plot(tmpX, tmpY, 'color', colors(s,:), 'linewidth', 1, 'HandleVisibility', 'off')
         end
     end
 
     % Legend
     if d == 1
         % Legend for color
-        for w = 1:length(wavelengths)
-            plot(nan, nan, 'Color', colors(w,:), 'linewidth', 3, ...
-                'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
+        for s = 1:length(farm_spacings)
+            plot(nan, nan, 'Color', colors(s,:), 'linewidth', 3, ...
+                'Displayname', sprintf('$S_x = %1.1fD', farm_spacings(s)), 'HandleVisibility', 'on')
         end
 
         % White space
@@ -266,9 +408,9 @@ for d = 1:length(DOFs)
         plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
 
         % Legend for marker shape
-        for s = 1:length(farm_spacings)
-            scatter(nan, nan, marker_size, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
-                    'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
+        for w = 1:length(wavelengths)
+            scatter(nan, nan, marker_size, wave_shapes{w}, 'black', 'filled', 'HandleVisibility', 'on', ...
+                    'DisplayName', sprintf('$\\lambda = %1.0fD$', wavelengths(w)))
         end
 
         % White space
@@ -290,9 +432,140 @@ end
 xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
 linkaxes(h, 'xy')
 xlim([0.5, 2.6])
+ylim([0, 1.5])
 
 clear d DOF name symb norm_symb h st wave_steepness steep s caze farm_spacing 
 clear w wave harmonic_ratio amplitude normalization leg row turbine t available_wave_cases
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PLOTTING: NORMALIZED STD AGAINST WAVELENGTH
+% LOOPED OVER ALL CENTER TURBINES
+% CONSIDERING A SINGLE DOF
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Which DOF to plot
+DOF = 'yaw_kal';
+name = DOF_names.(DOF);
+symb = DOF_symbs.(DOF);
+norm_symb = getDOFnormalization(DOF);
+
+% Plotting
+clc; close all
+figure('color','white')
+t = tiledlayout(1,length(centers) + 1);
+sgtitle(sprintf('%s Floating Wind Farm %s ($%s$) Normalized STD: $\\sigma_{%s} / %s$', farm_arrangement, name, DOF_symbs.(DOF), symb, norm_symb), 'interpreter', 'latex', 'fontsize', 14)
+
+% Loop through center turbines
+for c = 1:length(centers)
+    
+    % Get turbine
+    turbine = centers(c);
+    colors = row_colors.(sprintf('Row%1.0f', c));
+    
+    % Plotting
+    h(c) = nexttile;
+    title(sprintf('Row %1.0f', c))
+    hold on 
+
+    % Loop through farm spacings
+    for s = 1:length(farm_spacings)
+        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+        available_wave_cases = fieldnames(tracking.(farm_spacing));
+
+        % Loop through wave steepnesses
+        for st = 1:length(wave_steepnesses)
+            wave_steepness = wave_steepnesses(st);
+            steep = compose('%02d', round(100 * wave_steepness));
+        
+            % Loop through wavelengths
+            for w = 1:length(wavelengths)
+                wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
+
+                % Check that wave case is available in tracking data
+                if ismember(wave, available_wave_cases)
+
+                    % Normalizations
+                    if ismember(DOF, translations)
+                        amplitude = (wave_steepness * wavelengths(w) * 0.15) / (2 * pi);
+                        normalization = amplitude;
+            
+                    elseif ismember(DOF, rotations)
+                        normalization = wave_steepness;
+                    end
+    
+                    % Convert rotations into rad
+                    if ismember(DOF, rotations)
+                        scatter(wavelengths(w), deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization, marker_size, 'filled', ...
+                                'Marker', wave_shapes{w}, ...
+                                'MarkerFaceColor', colors(s,:), ...
+                                'MarkerFaceAlpha', steepness_alpha(st), ...
+                                'HandleVisibility','off');
+
+                        tmpX(w) = wavelengths(w);
+                        tmpY(w) = deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization;
+    
+                    % Leave translations as is
+                    else
+                        scatter(wavelengths(w), deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization, marker_size, 'filled', ...
+                                'Marker', wave_shapes{w}, ...
+                                'MarkerFaceColor', colors(s,:), ...
+                                'MarkerFaceAlpha', steepness_alpha(st), ...
+                                'HandleVisibility','off');
+
+                        tmpX(w) = wavelengths(w);
+                        tmpY(w) = deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization;
+                    end
+                end
+            end
+
+            % Connect the dots
+            plot(tmpX, tmpY, 'color', colors(s,:), 'linewidth', 1, 'HandleVisibility', 'off')
+        end
+    end
+
+    % Legend for each plot showing colors
+    for ss = 1:length(farm_spacings)
+        plot(nan, nan, 'Color', colors(ss,:), 'linewidth', 3, ...
+            'Displayname', sprintf('$S_x = %1.1fD', farm_spacings(ss)), 'HandleVisibility', 'on')
+    end
+    legend('Interpreter', 'latex', 'box', 'off', 'location', 'northwest', 'fontsize', 6)
+    hold off
+    xticks(2:1:5)
+    xlim([1.5, 5.5])
+    ylim([0, 2.5])
+end
+
+% Generate outside legend for marker shape and transparency
+axLeg = nexttile;
+hold on; axis off
+
+% Proxies for marker shapes (spacing)
+for ww = 1:numel(wavelengths)
+    scatter(axLeg, nan, nan, marker_size, wave_shapes{ww}, 'k', 'filled', ...
+        'DisplayName', sprintf('$\\lambda = %1.0fD$', wavelengths(ww)));
+end
+
+% Separator
+plot(axLeg, nan, nan, 'w', 'DisplayName', ' ');
+
+% Proxies for alpha (steepness)
+for stt = 1:numel(wave_steepnesses)
+    scatter(axLeg, nan, nan, marker_size, 'o', 'k', 'filled', ...
+        'MarkerFaceAlpha', steepness_alpha(stt), ...
+        'DisplayName', sprintf('$ak = %1.2f$', wave_steepnesses(stt)));
+end
+
+legend('Interpreter', 'latex', 'Box', 'off', 'FontSize', 10, 'Location', 'west');
+hold off
+
+% Plot axes labels
+xlabel(t, '$\lambda / D$', 'Interpreter','latex')
+linkaxes(h, 'xy')
+
+clear d DOF name symb norm_symb h st wave_steepness steep s caze farm_spacing c axLeg ww stt
+clear w wave harmonic_ratio amplitude normalization leg row turbine t available_wave_cases
+clear ww 
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -302,7 +575,7 @@ clear w wave harmonic_ratio amplitude normalization leg row turbine t available_
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Which DOF to plot
-DOF = 'roll_kal';
+DOF = 'yaw_kal';
 name = DOF_names.(DOF);
 symb = DOF_symbs.(DOF);
 norm_symb = getDOFnormalization(DOF);
@@ -310,7 +583,7 @@ norm_symb = getDOFnormalization(DOF);
 % Plotting
 clc; close all
 figure('color','white')
-t = tiledlayout(1,length(centers));
+t = tiledlayout(1,length(centers) + 1);
 sgtitle(sprintf('%s Floating Wind Farm %s ($%s$) Normalized STD: $\\sigma_{%s} / %s$', farm_arrangement, name, DOF_symbs.(DOF), symb, norm_symb), 'interpreter', 'latex', 'fontsize', 14)
 
 % Loop through center turbines
@@ -354,17 +627,17 @@ for c = 1:length(centers)
     
                     % Convert rotations into rad
                     if ismember(DOF, rotations)
-                        scatter(harmonic_ratio, deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization, marker_size, spacing_shapes{s}, 'filled', ...
-                                'Marker', spacing_shapes{s}, ...
-                                'MarkerFaceColor', colors(w,:), ...
+                        scatter(harmonic_ratio, deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization, marker_size, 'filled', ...
+                                'Marker', wave_shapes{w}, ...
+                                'MarkerFaceColor', colors(s,:), ...
                                 'MarkerFaceAlpha', steepness_alpha(st), ...
                                 'HandleVisibility','off');
     
                     % Leave translations as is
                     else
-                        scatter(harmonic_ratio, deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization, marker_size, spacing_shapes{s}, 'filled', ...
-                                'Marker', spacing_shapes{s}, ...
-                                'MarkerFaceColor', colors(w,:), ...
+                        scatter(harmonic_ratio, deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization, marker_size, 'filled', ...
+                                'Marker', wave_shapes{w}, ...
+                                'MarkerFaceColor', colors(s,:), ...
                                 'MarkerFaceAlpha', steepness_alpha(st), ...
                                 'HandleVisibility','off');
                     end
@@ -373,53 +646,53 @@ for c = 1:length(centers)
         end
     end
 
-    % Legend
-    if c == 1
-        % Legend for color
-        for w = 1:length(wavelengths)
-            plot(nan, nan, 'Color', colors(w,:), 'linewidth', 3, ...
-                'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
-        end
-
-        % White space
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-
-        % Legend for marker shape
-        for s = 1:length(farm_spacings)
-            scatter(nan, nan, marker_size, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
-                    'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
-        end
-
-        % White space
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
-
-        % Legend for marker alpha
-        for st = 1:length(wave_steepnesses)
-            scatter(nan, nan, marker_size, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
-                    'markerfacealpha', steepness_alpha(st), ...
-                    'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
-        end
-
-        leg = legend('interpreter', 'latex', 'box', 'off');
-        leg.Layout.Tile = 'east';
+    % Legend for each plot showing colors
+    for ss = 1:length(farm_spacings)
+        plot(nan, nan, 'Color', colors(ss,:), 'linewidth', 3, ...
+            'Displayname', sprintf('$S_x = %1.1fD', farm_spacings(ss)), 'HandleVisibility', 'on')
     end
+    legend('Interpreter', 'latex', 'box', 'off', 'location', 'northeast', 'fontsize', 8)
     hold off
+    xlim([0.5, 2.6])
 end
+
+% Generate outside legend for marker shape and transparency
+axLeg = nexttile;
+hold on; axis off
+
+% Proxies for marker shapes (spacing)
+for ww = 1:numel(wavelengths)
+    scatter(axLeg, nan, nan, marker_size, wave_shapes{ww}, 'k', 'filled', ...
+        'DisplayName', sprintf('$\\lambda = %1.0fD$', wavelengths(ww)));
+end
+
+% Separator
+plot(axLeg, nan, nan, 'w', 'DisplayName', ' ');
+
+% Proxies for alpha (steepness)
+for stt = 1:numel(wave_steepnesses)
+    scatter(axLeg, nan, nan, marker_size, 'o', 'k', 'filled', ...
+        'MarkerFaceAlpha', steepness_alpha(stt), ...
+        'DisplayName', sprintf('$ak = %1.2f$', wave_steepnesses(stt)));
+end
+
+legend('Interpreter', 'latex', 'Box', 'off', 'FontSize', 10, 'Location', 'west');
+hold off
+
+% Plot axes labels
 xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
 linkaxes(h, 'xy')
-xlim([0.5, 2.6])
+
 % ylim([0, 2])
 
-clear d DOF name symb norm_symb h st wave_steepness steep s caze farm_spacing c
+clear d DOF name symb norm_symb h st wave_steepness steep s caze farm_spacing c axLeg ww stt
 clear w wave harmonic_ratio amplitude normalization leg row turbine t available_wave_cases
+clear ww 
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % FUNCTIONS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 
 function row = turbineRow(turbineID, layout)
     % turbineRow: Figures out which row a turbine is in for both inline and
@@ -437,7 +710,6 @@ function row = turbineRow(turbineID, layout)
             error('Unknown layout type')
     end
 end
-
 
 
 function output = getwaveproperties(wave)

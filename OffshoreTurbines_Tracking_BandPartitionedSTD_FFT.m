@@ -1,6 +1,6 @@
 %% Looking at band-limited RMS/STD of motion (CORRECTED VERSION)
 % Zein Sadek
-% 
+
 % Key changes from original:
 % 1. Uses FFT-based band-limited RMS (no filter roll-off losses)
 % 2. Bands are defined to be perfectly contiguous: 
@@ -13,9 +13,9 @@
 % bandPartitionedDEVIATIONS
 
 clear; close all; clc;
+addpath("/Users/zeinsadek/Documents/MATLAB/colormaps/slanCM")
 addpath("/Users/zeinsadek/Documents/MATLAB/MatlabFunctions")
 addpath("/Users/zeinsadek/Documents/MATLAB/colormaps")
-addpath('/Users/zeinsadek/Documents/MATLAB/colormaps/slanCM')
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % IMPORT TRACKING
@@ -26,7 +26,7 @@ offshore_path = "/Users/zeinsadek/Desktop/Experiments/Offshore";
 tracking_path = fullfile(offshore_path, "Tracking/Data/Matfiles");
 
 % Farm layout + Data filter version
-farm_arrangement = "Inline";
+farm_arrangement = "Staggered";
 harmonic_cutoff = 5;
 
 
@@ -125,19 +125,19 @@ frequency_names.HF = "High Frequency";
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Wavelengths and steepnesses to loop over
-wavelengths = [5,4,3,2];
+wavelengths = [2,3,4,5];
 wave_steepnesses = [0.06, 0.09, 0.12];
 
 % Colors per row
-row_colors.Row1 = flipud(slanCM(45, 2 * length(wavelengths)));
-row_colors.Row2 = flipud(slanCM(47, 2 * length(wavelengths)));
-row_colors.Row3 = flipud(slanCM(34, 2 * length(wavelengths)));
-row_colors.Row4 = flipud(slanCM(35, 2 * length(wavelengths)));
+row_colors.Row1 = flipud(slanCM(45, 2 * length(farm_spacings)));
+row_colors.Row2 = flipud(slanCM(47, 2 * length(farm_spacings)));
+row_colors.Row3 = flipud(slanCM(34, 2 * length(farm_spacings)));
+row_colors.Row4 = flipud(slanCM(35, 2 * length(farm_spacings)));
 
 % Scatter plot nomenclature
 marker_size = 100;
 steepness_alpha = [0.3, 0.6, 1];
-spacing_shapes = {'o', 'diamond', '^', 'v', 'square'};
+wave_shapes = {'o', '^', 'square', 'pentagram'};
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -312,7 +312,7 @@ clear LF WF HF ss ratio ratios worst_cases wc sortIdx
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % PLOTTING: NORMALIZED BAND-PARTITIONED VARIANCE 
-% AGAINST HARMONIC RATIO
+% AGAINST WAVELENGTH
 % LOOPED OVER ALL DOF
 % CONSIDERING A SINGLE TURBINE
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -323,8 +323,8 @@ clear LF WF HF ss ratio ratios worst_cases wc sortIdx
 % from 0 to 1
 
 % Which turbine to plot
-turbine = 7;
-frequency_component = 'LF';
+turbine = centers(3);
+frequency_component = 'HF';
 row = turbineRow(turbine, farm_arrangement);
 frequency_name = frequency_names.(frequency_component);
 colors = row_colors.(sprintf('Row%1.0f', row));
@@ -363,26 +363,33 @@ for d = 1:length(DOFs)
 
                 % Check that wave case is available in tracking data
                 if ismember(wave, available_wave_cases)
-                    harmonic_ratio = farm_spacings(s) / wavelengths(w);
     
                     total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
                     wave_band_variance = bandPartitionedDeviations.(farm_spacing).(wave)(turbine).(DOF).(frequency_component)^2;
                     wave_score = wave_band_variance ./ total_variance;
     
-                    scatter(harmonic_ratio, wave_score, marker_size, spacing_shapes{s}, 'filled', ...
-                            'MarkerFaceColor', colors(w,:), 'MarkerFaceAlpha', steepness_alpha(st), ...
+                    scatter(wavelengths(w), wave_score, marker_size, 'filled', ...
+                            'MarkerFaceColor', colors(s,:), ...
+                            'MarkerFaceAlpha', steepness_alpha(st), ...
+                            'Marker', wave_shapes{w}, ...
                             'HandleVisibility', 'off')
+
+                    tmpX(w) = wavelengths(w);
+                    tmpY(w) = wave_score;
                 end
             end
+            % Connect the dots
+            P = plot(tmpX, tmpY, 'color', colors(s,:), 'linewidth', 1, 'HandleVisibility', 'off');
+            P.Color(4) = steepness_alpha(st);
         end
     end
 
     % Legend
     if d == 1
         % Legend for color
-        for w = 1:length(wavelengths)
-            plot(nan, nan, 'Color', colors(w,:), 'linewidth', 3, ...
-                'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
+        for s = 1:length(farm_spacings)
+            plot(nan, nan, 'Color', colors(s,:), 'linewidth', 3, ...
+                'Displayname', sprintf('$S_x = %1.1fD', farm_spacings(s)), 'HandleVisibility', 'on')
         end
 
         % White space
@@ -390,9 +397,9 @@ for d = 1:length(DOFs)
         plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
 
         % Legend for marker shape
-        for s = 1:length(farm_spacings)
-            scatter(nan, nan, marker_size, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
-                    'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
+        for w = 1:length(wavelengths)
+            scatter(nan, nan, marker_size, wave_shapes{w}, 'black', 'filled', 'HandleVisibility', 'on', ...
+                    'DisplayName', sprintf('$\\lambda = %1.0fD$', wavelengths(w)))
         end
 
         % White space
@@ -406,26 +413,140 @@ for d = 1:length(DOFs)
                     'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
         end
 
-        % Place legend outside
         leg = legend('interpreter', 'latex', 'box', 'off');
         leg.Layout.Tile = 'east';
     end
     hold off
+    xticks(2:1:5)
 end
-xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
+xlabel(t, '$\lambda / D$', 'Interpreter','latex')
 ylabel(t, sprintf('$\\sigma_{%s}^2 / \\sigma^2$', frequency_component), 'interpreter', 'latex')
 linkaxes(h, 'xy')
-xlim([0.5, 2.6])
+xlim([1.5, 5.5])
 ylim([0, 1])
 
 clear frequency_component row frequency_name colors t d DOF name symb h s farm_spacing
 clear available_wave_cases st wave_steepness steep w wave harmonic_ratio total_variance
-clear wave_band_variance wave_score turbine leg
+clear wave_band_variance wave_score turbine leg tmpX tmpY
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PLOTTING: NORMALIZED BAND-PARTITIONED VARIANCE 
+% AGAINST HARMONIC RATIO
+% LOOPED OVER ALL DOF
+% CONSIDERING A SINGLE TURBINE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Plotting here the variance associated with the low, wave, or high 
+% frequency bands normalized by the total variance
+% Represents the percentage of the energy contained in this band, and varys
+% from 0 to 1
+
+% % Which turbine to plot
+% turbine = 5;
+% frequency_component = 'LF';
+% row = turbineRow(turbine, farm_arrangement);
+% frequency_name = frequency_names.(frequency_component);
+% colors = row_colors.(sprintf('Row%1.0f', row));
+% 
+% % Plotting
+% clc; close all
+% figure('color','white')
+% t = tiledlayout(2,3);
+% sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f %s Wave Score: $\\sigma_{%s}^2 / \\sigma^2$', farm_arrangement, row, frequency_name, frequency_component), 'Interpreter', 'latex')
+% 
+% % Loop over DOFs
+% for d = 1:length(DOFs)
+%     DOF = DOFs{d};
+% 
+%     % Properly name DOF
+%     name = DOF_names.(DOF);
+%     symb = DOF_symbs.(DOF);    
+% 
+%     % Plotting
+%     h(d) = nexttile;
+%     title(sprintf('%s: $(%s)$', name, symb), 'interpreter', 'latex', 'fontsize', 14)
+%     hold on 
+% 
+%     % Loop through farm spacings
+%     for s = 1:length(farm_spacings)
+%         farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+%         available_wave_cases = fieldnames(bandPartitionedDeviations.(farm_spacing));
+% 
+%         % Loop through wave steepnesses
+%         for st = 1:length(wave_steepnesses)
+%             steep = compose('%02d', round(100 * wave_steepnesses(st)));
+% 
+%             % Loop through wavelengths
+%             for w = 1:length(wavelengths)
+%                 wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
+% 
+%                 % Check that wave case is available in tracking data
+%                 if ismember(wave, available_wave_cases)
+%                     harmonic_ratio = farm_spacings(s) / wavelengths(w);
+% 
+%                     total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
+%                     wave_band_variance = bandPartitionedDeviations.(farm_spacing).(wave)(turbine).(DOF).(frequency_component)^2;
+%                     wave_score = wave_band_variance ./ total_variance;
+% 
+%                     scatter(harmonic_ratio, wave_score, marker_size, 'filled', ...
+%                             'MarkerFaceColor', colors(s,:), ...
+%                             'MarkerFaceAlpha', steepness_alpha(st), ...
+%                             'Marker', wave_shapes{w}, ...
+%                             'HandleVisibility', 'off')
+%                 end
+%             end
+%         end
+%     end
+% 
+%     % Legend
+%     if d == 1
+%         % Legend for color
+%         for s = 1:length(farm_spacings)
+%             plot(nan, nan, 'Color', colors(s,:), 'linewidth', 3, ...
+%                 'Displayname', sprintf('$S_x = %1.1fD', farm_spacings(s)), 'HandleVisibility', 'on')
+%         end
+% 
+%         % White space
+%         plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+%         plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+% 
+%         % Legend for marker shape
+%         for w = 1:length(wavelengths)
+%             scatter(nan, nan, marker_size, wave_shapes{w}, 'black', 'filled', 'HandleVisibility', 'on', ...
+%                     'DisplayName', sprintf('$\\lambda = %1.0fD$', wavelengths(w)))
+%         end
+% 
+%         % White space
+%         plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+%         plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+% 
+%         % Legend for marker alpha
+%         for st = 1:length(wave_steepnesses)
+%             scatter(nan, nan, marker_size, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
+%                     'markerfacealpha', steepness_alpha(st), ...
+%                     'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
+%         end
+% 
+%         leg = legend('interpreter', 'latex', 'box', 'off');
+%         leg.Layout.Tile = 'east';
+%     end
+%     hold off
+% end
+% xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
+% ylabel(t, sprintf('$\\sigma_{%s}^2 / \\sigma^2$', frequency_component), 'interpreter', 'latex')
+% linkaxes(h, 'xy')
+% xlim([0.5, 2.6])
+% ylim([0, 1])
+% 
+% clear frequency_component row frequency_name colors t d DOF name symb h s farm_spacing
+% clear available_wave_cases st wave_steepness steep w wave harmonic_ratio total_variance
+% clear wave_band_variance wave_score turbine leg
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % PLOTTING: BALANCE BETWWEEN LOW AND WAVE COMPONENTS 
-% BAND-PARTITIONED VARIANCE AGAINST HARMONIC RATIO
+% BAND-PARTITIONED VARIANCE AGAINST WAVELENGTH
 % LOOPED OVER ALL DOF
 % CONSIDERING A SINGLE TURBINE
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -436,7 +557,7 @@ clear wave_band_variance wave_score turbine leg
 % Varys from -1 to 1: -1 ~ low frequency, +1 ~ wave frequency
 
 % Which turbine to plot
-turbine = 7;
+turbine = centers(3);
 row = turbineRow(turbine, farm_arrangement);
 colors = row_colors.(sprintf('Row%1.0f', row));
 
@@ -475,7 +596,6 @@ for d = 1:length(DOFs)
 
                 % Check that wave case is available in tracking data
                 if ismember(wave, available_wave_cases)
-                    harmonic_ratio = farm_spacings(s) / wavelengths(w);
     
                     % Get data
                     total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
@@ -489,20 +609,28 @@ for d = 1:length(DOFs)
                     % Compute score
                     balance = (wave_norm - low_norm) / (wave_norm + low_norm);
     
-                    scatter(harmonic_ratio, balance, marker_size, spacing_shapes{s}, 'filled', ...
-                            'MarkerFaceColor', colors(w,:), 'MarkerFaceAlpha', steepness_alpha(st), ...
+                    scatter(wavelengths(w), balance, marker_size, 'filled', ...
+                            'MarkerFaceColor', colors(s,:), ...
+                            'MarkerFaceAlpha', steepness_alpha(st), ...
+                            'Marker', wave_shapes{w}, ...
                             'HandleVisibility', 'off')
+
+                    tmpX(w) = wavelengths(w);
+                    tmpY(w) = balance;
                 end
             end
+            % Connect the dots
+            P = plot(tmpX, tmpY, 'color', colors(s,:), 'linewidth', 1, 'HandleVisibility', 'off');
+            P.Color(4) = steepness_alpha(st);
         end
     end
 
     % Legend
     if d == 1
         % Legend for color
-        for w = 1:length(wavelengths)
-            plot(nan, nan, 'Color', colors(w,:), 'linewidth', 3, ...
-                'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(w)), 'HandleVisibility', 'on')
+        for s = 1:length(farm_spacings)
+            plot(nan, nan, 'Color', colors(s,:), 'linewidth', 3, ...
+                'Displayname', sprintf('$S_x = %1.1fD', farm_spacings(s)), 'HandleVisibility', 'on')
         end
 
         % White space
@@ -510,9 +638,9 @@ for d = 1:length(DOFs)
         plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
 
         % Legend for marker shape
-        for s = 1:length(farm_spacings)
-            scatter(nan, nan, marker_size, spacing_shapes{s}, 'black', 'filled', 'HandleVisibility', 'on', ...
-                    'DisplayName', sprintf('$S_x = %1.1fD', farm_spacings(s)))
+        for w = 1:length(wavelengths)
+            scatter(nan, nan, marker_size, wave_shapes{w}, 'black', 'filled', 'HandleVisibility', 'on', ...
+                    'DisplayName', sprintf('$\\lambda = %1.0fD$', wavelengths(w)))
         end
 
         % White space
@@ -526,19 +654,16 @@ for d = 1:length(DOFs)
                     'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
         end
 
-        % Place legend outside
         leg = legend('interpreter', 'latex', 'box', 'off');
         leg.Layout.Tile = 'east';
     end
     hold off
-
-    % Set aspect ratio equal since both values are unitless
-    % axis equal
+    xticks(2:1:5)
 end
-xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
+xlabel(t, '$\lambda / D$', 'Interpreter','latex')
 ylabel(t, '$(P_{WF} - P_{LF}) / (P_{WF} + P_{LF})$', 'interpreter', 'latex')
 linkaxes(h, 'xy')
-xlim([0.5, 2.6])
+xlim([1.5, 5.5])
 ylim([-1, 1])
 
 
@@ -551,6 +676,132 @@ clear low_norm wave_norm balance leg
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % PLOTTING: BALANCE BETWWEEN LOW AND WAVE COMPONENTS 
 % BAND-PARTITIONED VARIANCE AGAINST HARMONIC RATIO
+% LOOPED OVER ALL DOF
+% CONSIDERING A SINGLE TURBINE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Plotting here the variance associated with the low, wave, or high 
+% frequency bands normalized by the total variance
+% Represents the balance of the energy contained in the low and wave bands
+% Varys from -1 to 1: -1 ~ low frequency, +1 ~ wave frequency
+
+% % Which turbine to plot
+% turbine = 5;
+% row = turbineRow(turbine, farm_arrangement);
+% colors = row_colors.(sprintf('Row%1.0f', row));
+% 
+% % Plotting
+% clc; close all
+% figure('color','white')
+% t = tiledlayout(2,3);
+% sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f Low/Wave Frequency Variance Balance', farm_arrangement, row), 'Interpreter', 'latex')
+% 
+% % Loop through DOFs
+% for d = 1:length(DOFs)
+%     DOF = DOFs{d};
+% 
+%     % Properly name DOF
+%     name = DOF_names.(DOF);
+%     symb = DOF_symbs.(DOF);    
+% 
+%     % Plotting
+%     clc; clear tmp
+%     h(d) = nexttile;
+%     title(sprintf('%s: $(%s)$', name, symb), 'interpreter', 'latex', 'fontsize', 14)
+%     hold on 
+% 
+%     % Loop through farm spacings
+%     for s = 1:length(farm_spacings)
+%         farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+%         available_wave_cases = fieldnames(bandPartitionedDeviations.(farm_spacing));
+% 
+%         % Loop through wave steepnesses
+%         for st = 1:length(wave_steepnesses)
+%             steep = compose('%02d', round(100 * wave_steepnesses(st)));
+% 
+%             % Loop through wavelengths
+%             for w = 1:length(wavelengths)
+%                 wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
+% 
+%                 % Check that wave case is available in tracking data
+%                 if ismember(wave, available_wave_cases)
+%                     harmonic_ratio = farm_spacings(s) / wavelengths(w);
+% 
+%                     % Get data
+%                     total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
+%                     low_band_variance = bandPartitionedDeviations.(farm_spacing).(wave)(turbine).(DOF).LF^2;
+%                     wave_band_variance = bandPartitionedDeviations.(farm_spacing).(wave)(turbine).(DOF).WF^2;
+% 
+%                     % Normalize
+%                     low_norm = low_band_variance / total_variance;
+%                     wave_norm = wave_band_variance / total_variance;
+% 
+%                     % Compute score
+%                     balance = (wave_norm - low_norm) / (wave_norm + low_norm);
+% 
+%                     scatter(harmonic_ratio, balance, marker_size, 'filled', ...
+%                             'MarkerFaceColor', colors(s,:), ...
+%                             'MarkerFaceAlpha', steepness_alpha(st), ...
+%                             'Marker', wave_shapes{w}, ...
+%                             'HandleVisibility', 'off')
+%                 end
+%             end
+%         end
+%     end
+% 
+%     % Legend
+%     if d == 1
+%         % Legend for color
+%         for s = 1:length(farm_spacings)
+%             plot(nan, nan, 'Color', colors(s,:), 'linewidth', 3, ...
+%                 'Displayname', sprintf('$S_x = %1.1fD', farm_spacings(s)), 'HandleVisibility', 'on')
+%         end
+% 
+%         % White space
+%         plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+%         plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+% 
+%         % Legend for marker shape
+%         for w = 1:length(wavelengths)
+%             scatter(nan, nan, marker_size, wave_shapes{w}, 'black', 'filled', 'HandleVisibility', 'on', ...
+%                     'DisplayName', sprintf('$\\lambda = %1.0fD$', wavelengths(w)))
+%         end
+% 
+%         % White space
+%         plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+%         plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+% 
+%         % Legend for marker alpha
+%         for st = 1:length(wave_steepnesses)
+%             scatter(nan, nan, marker_size, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
+%                     'markerfacealpha', steepness_alpha(st), ...
+%                     'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
+%         end
+% 
+%         leg = legend('interpreter', 'latex', 'box', 'off');
+%         leg.Layout.Tile = 'east';
+%     end
+%     hold off
+% 
+%     % Set aspect ratio equal since both values are unitless
+%     % axis equal
+% end
+% xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
+% ylabel(t, '$(P_{WF} - P_{LF}) / (P_{WF} + P_{LF})$', 'interpreter', 'latex')
+% linkaxes(h, 'xy')
+% xlim([0.5, 2.6])
+% ylim([-1, 1])
+% 
+% 
+% clear frequency_component row frequency_name colors t d DOF name symb h s farm_spacing
+% clear available_wave_cases st wave_steepness steep w wave harmonic_ratio total_variance 
+% clear wave_band_variance wave_score turbine total_variance low_band_variance wave_band_variance
+% clear low_norm wave_norm balance leg
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PLOTTING: BALANCE BETWWEEN LOW AND WAVE COMPONENTS 
+% BAND-PARTITIONED VARIANCE AGAINST WAVELENGTH
 % LOOPED OVER ALL CENTER TURBINES
 % CONSIDERING A DOF
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -561,7 +812,7 @@ clear low_norm wave_norm balance leg
 % Varys from -1 to 1: -1 ~ low frequency, +1 ~ wave frequency
 
 % Which DOF to consider
-DOF = 'x_kal';
+DOF = 'pitch_kal';
 
 % Properly name DOF
 name = DOF_names.(DOF);
@@ -601,7 +852,6 @@ for c = 1:length(centers)
 
                 % Check that wave case is available in tracking data
                 if ismember(wave, available_wave_cases)
-                    harmonic_ratio = farm_spacings(s) / wavelengths(w);
     
                     % Get data
                     total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
@@ -615,11 +865,19 @@ for c = 1:length(centers)
                     % Compute score
                     wave_score = (wave_norm - low_norm) / (wave_norm + low_norm);
     
-                    scatter(harmonic_ratio, wave_score, marker_size, spacing_shapes{s}, 'filled', ...
-                            'MarkerFaceColor', colors(w,:), 'MarkerFaceAlpha', steepness_alpha(st), ...
+                    scatter(wavelengths(w), wave_score, marker_size, 'filled', ...
+                            'MarkerFaceColor', colors(s,:), ...
+                            'MarkerFaceAlpha', steepness_alpha(st), ...
+                            'Marker', wave_shapes{w}, ...
                             'HandleVisibility', 'off')
+
+                    tmpX(w) = wavelengths(w);
+                    tmpY(w) = wave_score;
                 end
             end
+            % Connect the dots
+            P = plot(tmpX, tmpY, 'color', colors(s,:), 'linewidth', 1, 'HandleVisibility', 'off');
+            P.Color(4) = steepness_alpha(st);
         end
     end
 
@@ -634,6 +892,7 @@ for c = 1:length(centers)
     yline(0, 'linestyle', '--', 'linewidth', 1, 'HandleVisibility', 'off', 'Alpha', 0.25)
     yticks(-1:0.5:1)
     hold off
+    xticks(2:1:5)
 
     % Set aspect ratio equal since both values are unitless
     % axis equal
@@ -644,9 +903,9 @@ axLeg = nexttile;
 hold on; axis off
 
 % Proxies for marker shapes (spacing)
-for ss = 1:numel(farm_spacings)
-    scatter(axLeg, nan, nan, marker_size, spacing_shapes{ss}, 'k', 'filled', ...
-        'DisplayName', sprintf('$S_x = %1.1fD$', farm_spacings(ss)));
+for ww = 1:numel(wavelengths)
+    scatter(axLeg, nan, nan, marker_size, wave_shapes{ww}, 'k', 'filled', ...
+        'DisplayName', sprintf('$\\lambda = %1.0fD$', wavelengths(ww)));
 end
 
 % Separator
@@ -664,16 +923,146 @@ hold off
   
 
 % Plot axes labels
-xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
+xlabel(t, '$\lambda / D$', 'Interpreter','latex')
 ylabel(t, '$(P_{WF} - P_{LF}) / (P_{WF} + P_{LF})$', 'interpreter', 'latex')
 linkaxes(h, 'xy')
-xlim(h(1:length(centers)), [0.5, 2.6])
+xlim(h(1:length(centers)), [1.5, 5.5])
 ylim(h(1:length(centers)), [-1, 1])
 
 clear frequency_component row frequency_name colors t d DOF name symb h s farm_spacing
 clear available_wave_cases st wave_steepness steep w wave harmonic_ratio total_variance 
 clear wave_band_variance wave_score turbine total_variance low_band_variance wave_band_variance
 clear low_norm wave_norm balance leg alpha_proxy axLeg c H legGlobal ss stt ww
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PLOTTING: BALANCE BETWWEEN LOW AND WAVE COMPONENTS 
+% BAND-PARTITIONED VARIANCE AGAINST HARMONIC RATIO
+% LOOPED OVER ALL CENTER TURBINES
+% CONSIDERING A DOF
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Plotting here the variance associated with the low, wave, or high 
+% frequency bands normalized by the total variance
+% Represents the balance of the energy contained in the low and wave bands
+% Varys from -1 to 1: -1 ~ low frequency, +1 ~ wave frequency
+
+% % Which DOF to consider
+% DOF = 'pitch_kal';
+% 
+% % Properly name DOF
+% name = DOF_names.(DOF);
+% symb = DOF_symbs.(DOF);
+% 
+% % Plotting
+% clc; close all
+% figure('color','white')
+% t = tiledlayout(1,length(centers) + 1);
+% sgtitle(sprintf('%s Floating Wind Farm: %s ($%s$) Low/Wave Frequency Variance Balance', farm_arrangement, name, symb), 'Interpreter', 'latex')
+% 
+% % Loop through center turbines
+% for c = 1:length(centers)
+% 
+%     % Get turbine and corresponding color
+%     turbine = centers(c);
+%     row = turbineRow(turbine, farm_arrangement);
+%     colors = row_colors.(sprintf('Row%1.0f', row));
+% 
+%     % Plotting
+%     h(c) = nexttile;
+%     title(sprintf('Row %1.0f', c))
+%     hold on 
+% 
+%     % Loop through farm spacings
+%     for s = 1:length(farm_spacings)
+%         farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+%         available_wave_cases = fieldnames(bandPartitionedDeviations.(farm_spacing));
+% 
+%         % Loop through wave steepnesses
+%         for st = 1:length(wave_steepnesses)
+%             steep = compose('%02d', round(100 * wave_steepnesses(st)));
+% 
+%             % Loop through wavelengths
+%             for w = 1:length(wavelengths)
+%                 wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
+% 
+%                 % Check that wave case is available in tracking data
+%                 if ismember(wave, available_wave_cases)
+%                     harmonic_ratio = farm_spacings(s) / wavelengths(w);
+% 
+%                     % Get data
+%                     total_variance = deviations.(farm_spacing).(wave)(turbine).(DOF)^2;
+%                     low_band_variance = bandPartitionedDeviations.(farm_spacing).(wave)(turbine).(DOF).LF^2;
+%                     wave_band_variance = bandPartitionedDeviations.(farm_spacing).(wave)(turbine).(DOF).WF^2;
+% 
+%                     % Normalize
+%                     low_norm = low_band_variance / total_variance;
+%                     wave_norm = wave_band_variance / total_variance;
+% 
+%                     % Compute score
+%                     wave_score = (wave_norm - low_norm) / (wave_norm + low_norm);
+% 
+%                     scatter(harmonic_ratio, wave_score, marker_size, 'filled', ...
+%                             'MarkerFaceColor', colors(s,:), ...
+%                             'MarkerFaceAlpha', steepness_alpha(st), ...
+%                             'Marker', wave_shapes{w}, ...
+%                             'HandleVisibility', 'off')
+%                 end
+%             end
+%         end
+%     end
+% 
+%     % Legend for each plot showing colors
+%     for ww = 1:length(wavelengths)
+%         plot(nan, nan, 'Color', colors(ww,:), 'linewidth', 3, ...
+%             'Displayname', sprintf('$\\lambda = %1.0fD$', wavelengths(ww)), 'HandleVisibility', 'on')
+%     end
+%     legend('Interpreter', 'latex', 'box', 'off', 'location', 'best', 'fontsize', 8)
+% 
+%     % Horizontal line at zero
+%     yline(0, 'linestyle', '--', 'linewidth', 1, 'HandleVisibility', 'off', 'Alpha', 0.25)
+%     yticks(-1:0.5:1)
+%     hold off
+% 
+%     % Set aspect ratio equal since both values are unitless
+%     % axis equal
+% end
+% 
+% % Generate outside legend for marker shape and transparency
+% axLeg = nexttile;
+% hold on; axis off
+% 
+% % Proxies for marker shapes (spacing)
+% for ww = 1:numel(wavelengths)
+%     scatter(axLeg, nan, nan, marker_size, wave_shapes{ww}, 'k', 'filled', ...
+%         'DisplayName', sprintf('$\\lambda = %1.0fD$', wavelengths(ww)));
+% end
+% 
+% % Separator
+% plot(axLeg, nan, nan, 'w', 'DisplayName', ' ');
+% 
+% % Proxies for alpha (steepness)
+% for stt = 1:numel(wave_steepnesses)
+%     scatter(axLeg, nan, nan, marker_size, 'o', 'k', 'filled', ...
+%         'MarkerFaceAlpha', steepness_alpha(stt), ...
+%         'DisplayName', sprintf('$ak = %1.2f$', wave_steepnesses(stt)));
+% end
+% 
+% legend('Interpreter', 'latex', 'Box', 'off', 'FontSize', 10, 'Location', 'west');
+% hold off
+% 
+% 
+% % Plot axes labels
+% xlabel(t, '$S_x / \lambda$', 'Interpreter','latex')
+% ylabel(t, '$(P_{WF} - P_{LF}) / (P_{WF} + P_{LF})$', 'interpreter', 'latex')
+% linkaxes(h, 'xy')
+% xlim(h(1:length(centers)), [0.5, 2.6])
+% ylim(h(1:length(centers)), [-1, 1])
+% 
+% clear frequency_component row frequency_name colors t d DOF name symb h s farm_spacing
+% clear available_wave_cases st wave_steepness steep w wave harmonic_ratio total_variance 
+% clear wave_band_variance wave_score turbine total_variance low_band_variance wave_band_variance
+% clear low_norm wave_norm balance leg alpha_proxy axLeg c H legGlobal ss stt ww
 
 
 

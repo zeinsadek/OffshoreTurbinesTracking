@@ -95,7 +95,7 @@ clear farm_spacing caze tmp waves
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% CORRECT COORDINATE SYSTEM
+% CORRECT COORDINATE SYSTEM + FILL NANS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Correct coordinate system to be aligned with:
@@ -182,7 +182,6 @@ clear fillmethod tmp tmp_tracking wave waves turbines farm_arrangement
 
 % Look at signals and identify obvious outliers and non-physical
 % measurements
-
 
 % Degrees of freedom
 DOFs = {'x_kal', 'y_kal', 'z_kal', 'roll_kal', 'pitch_kal', 'yaw_kal'};
@@ -382,8 +381,14 @@ for a = 1:length(farm_arrangements)
                     DOF = DOFs{d};
 
                     % Compute STD of signals and flag if too large
-                    stddev = std(non_problematic_tracking.(farm_arrangement).(farm_spacing).(wave)(t).(DOF), 0, 'all', 'omitnan');
+                    signal = non_problematic_tracking.(farm_arrangement).(farm_spacing).(wave)(t).(DOF);
+                    stddev = std(signal, 0, 'all', 'omitnan');
                     devs(signal_counter) = stddev;
+
+                    % Check for nans
+                    if sum(isnan(signal)) > 0
+                        fprintf('%s, Turbine %1.0f, %s %s has NaNs\n', caze, t, wave, DOF)
+                    end
 
                     if stddev > std_lim
                         fprintf('%s, Turbine %1.0f, %s %s\n', caze, t, wave, DOF)
@@ -422,7 +427,7 @@ yscale('log')
 
 nexttile
 hist(devs,20)
-clc; fprintf('Average STD: %2.2f\nMax STD %2.2f\n\n', mean(devs, 'all', 'omitnan'), max(devs, [], 'all', 'omitnan'))
+fprintf('Average STD: %2.2f\nMax STD %2.2f\n\n', mean(devs, 'all', 'omitnan'), max(devs, [], 'all', 'omitnan'))
 
 % Save a version with the problematic cases removed
 save_path = fullfile(tracking_path, "AllData", "OffshoreTracking_AllDataCombined_NoFilters_ProblematicCasesRemoved.mat");
@@ -431,7 +436,7 @@ save(save_path, 'tracking')
 fprintf('Done Saving!\n\n')
 
 clear a signal_counter caze d DOF farm_arrangement farm_spacing problems devs save_path
-clear s t tmp w wave waves stddev std_lim non_problematic_tracking problematic cases
+clear s t tmp w wave waves stddev std_lim non_problematic_tracking problematic cases signal
 
 
 
@@ -619,7 +624,6 @@ fprintf('Done Saving!\n\n')
 
 clear a caze d devs DOF farm_arrangement farm_spacing filtered_signal framelength polynomial_order
 clear s signal signal_counter stddev t w wave wave_frequency wavelength waves
-
 
 
 
