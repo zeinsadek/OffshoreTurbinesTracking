@@ -29,6 +29,10 @@ useShadowPerspective = true;
 shadowPerspectiveStrength = 1.0; % 0 = off, 1 = physical 1/depth^2 area scaling
 shadowDepthScaleLimits = [0.45, 2.25]; % [minimum, maximum] size multiplier
 
+
+
+
+
 % Hide historical trail markers covered by the turbine's current solid
 % geometry. Tests are performed in the current turbine-local coordinate
 % system, so the exclusion volumes follow all six degrees of freedom. The
@@ -72,6 +76,13 @@ buoyCenters0 = [ ...
 towerCenter0 = [0, 0];
 hubCenter0 = [0, 0, towerHeight];
 
+
+
+
+
+
+
+
 % Number of recent frames retained in the trail
 trailLength = 15;
 % shadowColormap = 'BuPu';
@@ -83,9 +94,29 @@ frameRate = 30;
 % Seconds
 duration = 5;  
 
-% 3D viewing angle
-viewAz = -45;
-viewEl = 30;
+
+
+
+
+
+
+
+% 3D camera controls
+% The usual orbiting view is produced by changing azimuth while holding
+% elevation fixed. A nonzero elevation rate can also be specified if a
+% rising/falling camera path is desired. Rates are in degrees per second.
+useRotatingCamera = true;
+cameraStartAz = -45;
+cameraStartEl = 30;
+cameraAzimuthRate = 18;   % deg/s; positive rotates counterclockwise
+cameraElevationRate = 0;  % deg/s; normally leave at zero
+
+% To make it rotate 360 throughout for any video length
+% cameraAzimuthRate = 360 / duration;
+
+% Optional elevation limits prevent the camera from crossing directly over
+% the poles if cameraElevationRate is nonzero.
+cameraElevationLimits = [-80, 80];
 
 
 
@@ -94,7 +125,7 @@ viewEl = 30;
 farm_arrangement = 'Inline';
 farm_spacing = 'SX50';
 turbine = 2;
-wave = 'LM25_AK12';
+wave = 'LM5_AK12';
 harmonic_cutoff = 2;
 
 % Load tracking data
@@ -109,9 +140,8 @@ filterspecs = full_tracking.FilterDesign;
 tracking = full_tracking.(farm_arrangement);
 
 % Saves
-caseFolder = [wave, '_', farm_spacing, '_', farm_arrangement];
-videoSavePath = fullfile('/Users/zeinsadek/Desktop/Experiments/Offshore/Tracking/Processing/TrackingCGI/Videos', caseFolder);
-videoSaveName = sprintf('OffshoreMotion_RealSignal_%s_%s_%s_Turbine_%s_FadingGrowing_Perspective_Test_LongShadow.mp4', farm_arrangement, farm_spacing, wave, num2str(turbine));
+videoSavePath = '/Users/zeinsadek/Desktop/Experiments/Offshore/Tracking/Processing/TrackingCGI/Videos';
+videoSaveName = sprintf('OffshoreMotion_RealSignal_%s_%s_%s_Turbine_%s_FadingGrowing_Perspective_Rotating_Test.mp4', farm_arrangement, farm_spacing, wave, num2str(turbine));
 
 % PNG export resolution
 frameResolution = 300;
@@ -181,14 +211,14 @@ hModel = patch( ...
     'Parent', motionTransform);
 
 axis(ax, 'equal')
-view(ax, viewAz, viewEl)
+view(ax, cameraStartAz, cameraStartEl)
 grid(ax, 'on')
 
 xlabel(ax, '$x$ [mm]', 'interpreter', 'latex', 'fontsize', labelFontSize)
 ylabel(ax, '$z$ [mm]', 'interpreter', 'latex', 'fontsize', labelFontSize)
 zlabel(ax, '$y$ [mm]', 'interpreter', 'latex', 'fontsize', labelFontSize)
 
-camlight(ax, 'headlight')
+hCameraLight = camlight(ax, 'headlight');
 material(ax, 'dull')
 
 % Perspective projects the CAD geometry naturally. Note that scatter-marker
@@ -293,6 +323,22 @@ T_fromOrigin(1:3,4) = rotationOrigin(:);
 % Animation loop
 
 for n = 1:nFrames
+
+    % Update the camera before calculating marker perspective so the CAD
+    % model and the depth-scaled trail use the same view for this frame.
+    if useRotatingCamera
+        currentAz = cameraStartAz + cameraAzimuthRate * t(n);
+        currentEl = cameraStartEl + cameraElevationRate * t(n);
+
+        % Keep elevation away from the singular +/-90-degree views.
+        currentEl = min(max(currentEl, cameraElevationLimits(1)), ...
+                              cameraElevationLimits(2));
+
+        view(ax, currentAz, currentEl);
+
+        % Keep the illumination attached to the moving camera.
+        camlight(hCameraLight, 'headlight');
+    end
 
     % Translations [mm]
 
