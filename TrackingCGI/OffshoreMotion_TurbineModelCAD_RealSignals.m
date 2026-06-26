@@ -13,7 +13,7 @@ tracking_path = fullfile(offshore_path, "Tracking/Data/Matfiles");
 tickFontSize = 8;
 labelFontSize = 10;
 
-markerSize = 15;
+markerSize = 5;
 turbineColor = [0.80 0.80 0.10];
 
 % Number of recent frames retained in the trail
@@ -24,7 +24,7 @@ shadowColormap = 'BuPu';
 frameRate = 30;   
 
 % Seconds
-duration = 30;  
+duration = 5;  
 
 
 % Which case to make CGI
@@ -47,7 +47,8 @@ tracking = full_tracking.(farm_arrangement);
 
 % Saves
 videoSavePath = '/Users/zeinsadek/Desktop/Experiments/Offshore/Tracking/Processing/TrackingCGI';
-videoSaveName = sprintf('OffshoreMotion_RealSignal_%s_%s_%s_Turbine_%s.mp4', farm_arrangement, farm_spacing, wave, num2str(turbine));
+% videoSaveName = sprintf('OffshoreMotion_RealSignal_%s_%s_%s_Turbine_%s.mp4', farm_arrangement, farm_spacing, wave, num2str(turbine));
+videoSaveName = sprintf('OffshoreMotion_RealSignal_%s_%s_%s_Turbine_%s_TipTest.mp4', farm_arrangement, farm_spacing, wave, num2str(turbine));
 
 % PNG export resolution
 frameResolution = 300;
@@ -101,7 +102,8 @@ scatter3(ax, 0, 0, 0, ...
     markerSize, ...
     'filled', ...
     'MarkerFaceColor', 'black', ...
-    'MarkerEdgeColor', 'none');
+    'MarkerEdgeColor', 'none', ...
+    'MarkerFaceAlpha', 0.5);
 
 % Transformation container
 motionTransform = hgtransform('Parent', ax);
@@ -136,10 +138,14 @@ set(ax, 'YDir', 'reverse')
 % Each row is one reference point attached to the undeformed turbine.
 % Coordinates must be in the same coordinate system as Vdata.
 shadowPoints0 = [ ...
-      17.5,   0.0, 100.0;   % Hub
-    -41.9,  72.5,   0.0;   % Front-left buoy
-    -41.9, -72.5,   0.0;   % Front-right buoy
-     83.7,   0.0,   0.0];  % Rear buoy
+      17.5,  00.0, 100.0;   % Hub
+     -41.9,  72.5,   0.0;   % Front-left buoy
+     -41.9, -72.5,   0.0;   % Front-right buoy
+      83.7,  00.0,   0.0;   % Rear buoy
+     -25.5,  00.0, 175.0;   % Top rotor tip
+     -25.5,  64.9,  62.5;   % Turbine lower left rotor tip
+     -25.5, -64.9,  62.5];  % Turbine lower right rotor tip
+    
 
 nShadowPoints = size(shadowPoints0, 1);
 
@@ -169,15 +175,6 @@ nFrames   = frameRate * duration;
 % Exclude duplicated endpoint
 t = (0:nFrames-1) / frameRate;
 
-% Dummy time series
-% surgeData = A_surge * sin(2*pi*fMotion*t);
-% swayData  = A_sway  * sin(2*pi*fMotion*t + pi/3);
-% heaveData = A_heave * sin(2*pi*fMotion*t + pi/2);
-% 
-% rollData  = A_roll  * sin(2*pi*fMotion*t + pi/4);
-% pitchData = A_pitch * sin(2*pi*fMotion*t);
-% yawData   = A_yaw   * sin(2*pi*fMotion*t + 2*pi/3);
-
 %%% LOAD REAL DATA
 surgeData = tracking.(farm_spacing).(wave)(turbine).x_kal * 1E3;
 swayData = tracking.(farm_spacing).(wave)(turbine).y_kal * 1E3;
@@ -186,22 +183,6 @@ heaveData = tracking.(farm_spacing).(wave)(turbine).z_kal * 1E3;
 rollData = tracking.(farm_spacing).(wave)(turbine).roll_kal;
 pitchData = tracking.(farm_spacing).(wave)(turbine).pitch_kal;
 yawData = tracking.(farm_spacing).(wave)(turbine).yaw_kal;
-
-%%% Fix axis limits
-% modelExtent = max(Vdata, [], 1) - min(Vdata, [], 1);
-% margin = 0.15 * max(modelExtent);
-% 
-% xlim(ax, [ ...
-%     min(Vdata(:,1)) - A_surge - margin, ...
-%     max(Vdata(:,1)) + A_surge + margin]);
-% 
-% ylim(ax, [ ...
-%     min(Vdata(:,2)) - A_sway - margin, ...
-%     max(Vdata(:,2)) + A_sway + margin]);
-% 
-% zlim(ax, [ ...
-%     min(Vdata(:,3)) - A_heave - margin, ...
-%     max(Vdata(:,3)) + A_heave + margin]);
 
 xlim([-100, 200])
 ylim([-200, 200])
