@@ -36,7 +36,7 @@ useTrailExclusion = true;
 
 % Small clearance around each analytical exclusion volume. This prevents a
 % finite-size scatter marker from appearing partially embedded in a surface.
-exclusionPadding = 2; % mm
+exclusionPadding = 1; % mm
 
 % Buoys: vertical cylinders. The reference points in shadowPoints0 are at
 % the centers of the buoy top surfaces.
@@ -91,6 +91,7 @@ videoSavePath = '/Users/zeinsadek/Desktop/Experiments/Offshore/Tracking/Processi
 videoSaveName = sprintf('OffshoreMotion_RealSignal_%s_%s_%s_Turbine_%s_FadingGrowing_Perspective_Exclusion_Test.mp4', farm_arrangement, farm_spacing, wave, num2str(turbine));
 
 % PNG export resolution
+% Increasing this (~600) makes the videos crisper
 frameResolution = 300;
 
 
@@ -183,12 +184,13 @@ set(ax, 'YDir', 'reverse')
 % Coordinates must be in the same coordinate system as Vdata.
 shadowPoints0 = [ ...
       17.5,  00.0, 100.0;   % Hub
-     -41.9,  72.5,   0.0;   % Front-left buoy
-     -41.9, -72.5,   0.0;   % Front-right buoy
-      83.7,  00.0,   0.0;   % Rear buoy
+     -41.9,  72.5, -45.0;   % Front-left buoy
+     -41.9, -72.5, -45.0;   % Front-right buoy
+      83.7,  00.0, -45.0;   % Rear buoy-28.868
      -25.5,  00.0, 175.0;   % Top rotor tip
      -25.5,  64.9,  62.5;   % Turbine lower left rotor tip
      -25.5, -64.9,  62.5];  % Turbine lower right rotor tip
+
     
 
 nShadowPoints = size(shadowPoints0, 1);
