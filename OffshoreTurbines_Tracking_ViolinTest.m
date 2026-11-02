@@ -133,7 +133,6 @@ DOF = 'pitch_kal';
 farm_arrangement = 'Inline';
 farm_spacing = 'SX50';
 wave = 'LM5_AK12';
-% wave = 'LM0_AK00';
 
 clc; close all
 figure('color', 'white')
@@ -150,3 +149,120 @@ xlabel('Turbine Number')
 ylabel('Motion [m] or [deg]')
 title(sprintf('FWF %s %s %s\n %s Fluctuations', farm_arrangement, farm_spacing, wave, DOF), 'interpreter', 'none')
 ylim([-50, 50])
+
+
+
+%% Tes with all turbines (fluctuations)
+
+
+% full_tracking.(arrangement).(farm_spacing).(wave)(t).(DOF)waves
+
+DOF = 'yaw_kal';
+farm_arrangement = 'Staggered';
+farm_spacing = 'SX50';
+turbine = 9;
+waves = fields(full_tracking.(farm_arrangement).(farm_spacing));
+
+amplitudes = nan(1, length(waves));
+for i = 1:length(waves)
+    wave = waves{i};
+    tmp = full_tracking.(farm_arrangement).(farm_spacing).(wave)(turbine).(DOF);
+    tmp = tmp - mean(tmp, 'all', 'omitnan');
+    
+    splts = split(wave, '_');
+
+    if strcmp(splts{1}, 'LM0')
+        amplitude = 0;
+        wavelength = 0;
+    else
+        wavelength = wavelengths_from_string.(splts{1}) * 0.150;
+        steepness = steepesses_from_string.(splts{2});
+        amplitude = (steepness * wavelength) / (2 * pi);
+    end
+    amplitudes(i) = amplitude;
+end
+
+
+
+steepness_colors.AK06 = '#dd6e42';
+steepness_colors.AK09 = '#e8dab2';
+steepness_colors.AK12 = '#4f6d7a';
+
+
+wavelength_markers.LM0 = 'o';
+wavelength_markers.LM2 = '>';
+wavelength_markers.LM3 = '<';
+wavelength_markers.LM4 = 'p';
+wavelength_markers.LM5 = 's';
+wavelength_markers.LM25 = 'v';
+wavelength_markers.LM33 = '^';
+
+tickFontSize = 8;
+labelFontSize = 10;
+
+
+
+fit_x = nan(1, length(waves));
+fit_y = nan(1, length(waves));
+
+% Plot in order of increasing amplitude
+[~, idxs] = sort(amplitudes, 'ascend');
+reordered_waves = waves(idxs);
+clc; close all
+figure('color', 'white')
+hold on
+for i = 1:length(waves)
+    wave = reordered_waves{i};
+    tmp = full_tracking.(farm_arrangement).(farm_spacing).(wave)(turbine).(DOF);
+    tmp = tmp - mean(tmp, 'all', 'omitnan');
+
+    % crop to a certain number of STDs
+    tmp(abs(tmp) > 3 * std(tmp, 0, 'all', 'omitnan')) = nan;
+    
+    splts = split(wave, '_');
+
+    if strcmp(splts{1}, 'LM0')
+        amplitude = 0;
+        wavelength = 0;
+        color = 'black';
+    else
+        wavelength = wavelengths_from_string.(splts{1}) * 0.150;
+        steepness = steepesses_from_string.(splts{2});
+        amplitude = (steepness * wavelength) / (2 * pi);
+
+        color = steepness_colors.(splts{2});
+    end
+
+    VP = violinplot(amplitude * 100, abs(tmp), 'FaceColor', color, 'EdgeColor', color, 'FaceAlpha', 0.05, 'linewidth', 1);
+    S = scatter(amplitude * 100, mean(abs(tmp), 'all', 'omitnan'), 50, wavelength_markers.(splts{1}), 'markerfacecolor', color, 'markeredgecolor', 'black', 'linewidth', 1);
+    uistack(S, 'top')
+    uistack(VP, 'bottom')
+
+    fit_x(i) = amplitude * 100;
+    fit_y(i) = mean(abs(tmp), 'all', 'omitnan');
+
+end
+
+
+P = polyfit(fit_x, fit_y, 2);
+% plot_x = 0:0.1:max(fit_x);
+plot_x = 0:0.1:2;
+plot(plot_x, polyval(P, plot_x), 'color', 'black', 'linewidth', 2, 'linestyle', ':');
+hold off
+
+
+yline(0)
+% xticks(1:12)
+% xlabel('Turbine Number')
+% ylabel('Motion [m] or [deg]')
+title(sprintf('FWF %s %s %s\n %s Fluctuations', farm_arrangement, farm_spacing, wave, DOF), 'interpreter', 'none')
+axis square
+% yscale('log')
+% ylim([-15, 15])
+ylim([-2.5, 18])
+
+ax = gca;
+set(ax, 'FontSize', tickFontSize)
+set(ax, 'TickLabelInterpreter', 'latex');
+xlabel('$a$ [cm]', 'interpreter', 'latex', 'fontsize', labelFontSize)
+ylabel(sprintf('$%s$ [%s]', DOF_symbs.(DOF), 'Deg'), 'interpreter', 'latex', 'fontsize', labelFontSize)

@@ -559,8 +559,8 @@ clear noise_floor noise_floor_dB tmp peak_ind
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Case to plot
-spacing = 'SX50';
-DOF = 'yaw_kal';
+spacing = 'SX30';
+DOF = 'pitch_kal';
 available_wave_cases = fieldnames(tracking.(spacing));
 
 % Properly name DOF

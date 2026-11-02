@@ -189,11 +189,13 @@ colors = row_colors.(sprintf('Row%1.0f', row));
 % Plotting
 clc; close all
 figure('color','white')
-t = tiledlayout(2,3);
+% t = tiledlayout(2,3);
+t = tiledlayout(1,3);
 sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f Normalized STD', farm_arrangement, row), 'Interpreter', 'latex')
 
 % Loop through DOF
-for d = 1:length(DOFs)
+% for d = 1:length(DOFs)
+for d = 4:length(DOFs)
     DOF = DOFs{d};
     
     % Properly name DOF
@@ -305,6 +307,150 @@ ylim([0, 2.2])
 
 clear d DOF name symb norm_symb h st wave_steepness steep s caze farm_spacing tmpX tmpY P
 clear w wave harmonic_ratio amplitude normalization leg row turbine t available_wave_cases
+
+
+
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PLOTTING: NORMALIZED STD AGAINST AMPLITUDE
+% LOOPED OVER ALL DOF
+% CONSIDERING A SINGLE TURBINE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Which turbine to plot
+turbine = 9;
+row = turbineRow(turbine, farm_arrangement);
+colors = row_colors.(sprintf('Row%1.0f', row));
+
+% Plotting
+clc; close all
+figure('color','white')
+t = tiledlayout(2,3);
+sgtitle(sprintf('%s Floating Wind Farm: Row %1.0f Normalized STD', farm_arrangement, row), 'Interpreter', 'latex')
+
+% Loop through DOF
+for d = 1:length(DOFs)
+    DOF = DOFs{d};
+    
+    % Properly name DOF
+    name = DOF_names.(DOF);
+    symb = DOF_symbs.(DOF);
+    norm_symb = getDOFnormalization(DOF);
+   
+    % Plotting
+    h(d) = nexttile;
+    title(sprintf('%s ($%s$): $\\sigma_{%s} / %s$', name, symb, symb, norm_symb), 'interpreter', 'latex', 'fontsize', 14)
+    hold on 
+
+    % Loop through farm spacings
+    for s = 1:length(farm_spacings)
+        farm_spacing = ['SX', num2str(farm_spacings(s) * 10)];
+        available_wave_cases = fieldnames(tracking.(farm_spacing));
+
+        % Loop through wave steepesses
+        % for st = 1:length(wave_steepnesses)
+        for st = 1:3
+            wave_steepness = wave_steepnesses(st);
+            steep = compose('%02d', round(100 * wave_steepness));
+
+            % Loop through wavelengths
+            for w = 1:length(wavelengths)
+                wave = ['LM', num2str(wavelengths(w)), '_AK', steep{1}];
+
+                % Check that wave case is available in tracking data
+                if ismember(wave, available_wave_cases)
+    
+                    % Normalizations
+                    if ismember(DOF, translations)
+                        amplitude = (wave_steepness * wavelengths(w) * 0.15) / (2 * pi);
+                        normalization = amplitude;
+                    elseif ismember(DOF, rotations)
+                        amplitude = (wave_steepness * wavelengths(w) * 0.15) / (2 * pi);
+                        normalization = wave_steepness;
+                    end
+    
+                    % Convert rotations into rad
+                    if ismember(DOF, rotations)
+                        scatter(amplitude / 0.15, deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization, marker_size, 'filled', ...
+                                'Marker', wave_shapes{w}, ...
+                                'MarkerFaceColor', colors(s,:), ...
+                                'MarkerFaceAlpha', steepness_alpha(st), ...
+                                'HandleVisibility','off');
+
+                        tmpX(w) = amplitude / 0.15;
+                        tmpY(w) = deg2rad(deviations.(farm_spacing).(wave)(turbine).(DOF)) / normalization;
+    
+                    % Leave translations as is
+                    else
+                        scatter(amplitude / 0.15, deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization, marker_size, 'filled', ...
+                                'Marker', wave_shapes{w}, ...
+                                'MarkerFaceColor', colors(s,:), ...
+                                'MarkerFaceAlpha', steepness_alpha(st), ...
+                                'HandleVisibility','off');
+
+                        tmpX(w) = amplitude / 0.15;
+                        tmpY(w) = deviations.(farm_spacing).(wave)(turbine).(DOF) / normalization;
+                    end
+                end
+            end
+            
+            P = plot(tmpX, tmpY, 'color', colors(s,:), 'linewidth', 1, 'HandleVisibility', 'off');
+            P.Color(4) = steepness_alpha(st);
+
+        end
+    end
+
+    % Legend
+    if d == 1
+        % Legend for color
+        for s = 1:length(farm_spacings)
+            plot(nan, nan, 'Color', colors(s,:), 'linewidth', 3, ...
+                'Displayname', sprintf('$S_x = %1.1fD', farm_spacings(s)), 'HandleVisibility', 'on')
+        end
+
+        % White space
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+
+        % Legend for marker shape
+        for w = 1:length(wavelengths)
+            scatter(nan, nan, marker_size, wave_shapes{w}, 'black', 'filled', 'HandleVisibility', 'on', ...
+                    'DisplayName', sprintf('$\\lambda = %1.0fD$', wavelengths(w)))
+        end
+
+        % White space
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+        plot(nan, nan, 'color', 'white', 'HandleVisibility', 'on', 'displayname', '')
+
+        % Legend for marker alpha
+        for st = 1:length(wave_steepnesses)
+            scatter(nan, nan, marker_size, 'o', 'black', 'filled', 'HandleVisibility', 'on', ...
+                    'markerfacealpha', steepness_alpha(st), ...
+                    'Displayname', sprintf('$ak = %1.2f$', wave_steepnesses(st)))
+        end
+
+        leg = legend('interpreter', 'latex', 'box', 'off');
+        leg.Layout.Tile = 'east';
+    end
+    hold off
+    % xticks(2:1:5)
+end
+xlabel(t, '$a / D$', 'Interpreter','latex')
+linkaxes(h, 'xy')
+% xlim([1.5, 5.5])
+xlim([0, 0.1])
+ylim([0, 2.2])
+
+clear d DOF name symb norm_symb h st wave_steepness steep s caze farm_spacing tmpX tmpY P
+clear w wave harmonic_ratio amplitude normalization leg row turbine t available_wave_cases
+
+
+
+
+
+
+
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

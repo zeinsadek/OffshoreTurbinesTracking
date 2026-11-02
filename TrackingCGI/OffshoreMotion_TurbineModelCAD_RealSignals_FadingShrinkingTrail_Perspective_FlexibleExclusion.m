@@ -74,28 +74,27 @@ hubCenter0 = [0, 0, towerHeight];
 
 % Number of recent frames retained in the trail
 trailLength = 15;
-% shadowColormap = 'BuPu';
 shadowColormap = 'amethyst';
 
 % Frames per second
 frameRate = 30;   
 
 % Seconds
-duration = 5;  
+duration = 60;  
 
 % 3D viewing angle
-viewAz = -45;
-viewEl = 30;
+viewAz = -21;
+viewEl = 40;
 
 
 
 
 %%% Which case to make CGI
-farm_arrangement = 'Inline';
+farm_arrangement = 'Staggered';
 farm_spacing = 'SX50';
-turbine = 2;
-wave = 'LM25_AK12';
-harmonic_cutoff = 2;
+turbine = 5;
+wave = 'LM5_AK12';
+harmonic_cutoff = 5;
 
 % Load tracking data
 tracking_file = sprintf('OffshoreTracking_AllDataCombined_SavitskyGolay_Cutoff_%1.0f.mat', harmonic_cutoff);
@@ -111,7 +110,8 @@ tracking = full_tracking.(farm_arrangement);
 % Saves
 caseFolder = [wave, '_', farm_spacing, '_', farm_arrangement];
 videoSavePath = fullfile('/Users/zeinsadek/Desktop/Experiments/Offshore/Tracking/Processing/TrackingCGI/Videos', caseFolder);
-videoSaveName = sprintf('OffshoreMotion_RealSignal_%s_%s_%s_Turbine_%s_FadingGrowing_Perspective_Test_LongShadow.mp4', farm_arrangement, farm_spacing, wave, num2str(turbine));
+if ~exist(videoSavePath); mkdir(videoSavePath); end
+videoSaveName = sprintf('OffshoreMotion_%s_%s_%s_Turbine_%s_ShadowLength_%s_Frames.mp4', farm_arrangement, farm_spacing, wave, num2str(turbine), num2str(trailLength));
 
 % PNG export resolution
 frameResolution = 300;

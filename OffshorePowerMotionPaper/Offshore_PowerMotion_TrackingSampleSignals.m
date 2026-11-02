@@ -22,7 +22,7 @@ offshore_path = "/Users/zeinsadek/Desktop/Experiments/Offshore";
 tracking_path = fullfile(offshore_path, "Tracking/Data/Matfiles");
 
 % Farm layout + Data filter version
-farm_arrangement = "Inline";
+farm_arrangement = "Staggered";
 harmonic_cutoff = 2;
 
 
@@ -133,13 +133,13 @@ linewidth = 0.5;
 colors = slanCM('dusk', length(DOFs));
 
 
-farm_arrangement = 'Inline';
+farm_arrangement = 'Staggered';
 farm_spacing = 'SX50';
 wave = 'LM5_AK12';
 turbine = 2;
 
 clc; close all
-fig = figure('color', 'white', 'units', 'centimeters', 'position', [10, 10, 7, 5]);
+fig = figure('color', 'white', 'units', 'centimeters', 'position', [10, 10, 6.90, 5.4]);
 tiledlayout(length(DOFs), 1, 'padding', 'none', 'TileSpacing', 'none')
 for i = 1:length(DOFs)
     DOF = DOFs{i};
@@ -180,7 +180,8 @@ for i = 1:length(DOFs)
 end
 
 linkaxes(h, 'xy')
-xlim([0, 60])
+xlim([0, 63])
+xticks(0:10:60)
 
 xlabel('Time [s]', 'interpreter', 'latex', 'fontsize', labelFontSize)
 
